@@ -157,8 +157,8 @@ def run_self_tests():
     """
     t_start = time.perf_counter()
 
-    # Case A: Exact copy of real daily 429 error returned by Google RPC
-    # Preserves exact quotaMetric, quotaId, quotaDimensions, quotaValue, message, and Help link.
+    # Case A: Modeled on a real daily 429 error returned by Google RPC
+    # Preserves exact quotaMetric, quotaId, quotaDimensions, and retryDelay from the observed response.
     real_daily_response_json = {
         "error": {
             "code": 429,

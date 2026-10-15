@@ -127,18 +127,34 @@ Before the chat service handles any user questions, an offline ingestion script 
 - **Con**: Requires two LLM calls per question (one to select the tool and arguments, a second to synthesize the answer from the tool's output), and small quantized local models can occasionally produce malformed tool-call JSON.
 
 ### 2. Impact of Two LLM Calls on Latency and Free-Tier Rate Limits
-Because every tool-assisted question makes **at least two sequential LLM calls**, end-to-end latency roughly doubles and effective rate-limit capacity is cut in half.
+Because every tool-assisted question makes **at least two sequential LLM calls**, end-to-end latency roughly doubles and effective request capacity is cut in half.
 
-- **Latency (Assumed, to be benchmarked in Step 9)**:
-  - Hosted Gemini API: ~1–2s single call $\rightarrow$ ~2–4s two-call tool cycle.
-  - Local quantized open model: ~4–10s single pass $\rightarrow$ ~8–20s two-call tool cycle.
-- **Hosted Model Quotas (Google AI Studio Free Tier — `gemini-2.5-flash`)**:
-  - **Rate Limits**: 15 Requests Per Minute (RPM), 1,500 Requests Per Day (RPD), 1,000,000 Tokens Per Minute (TPM).
-  - **Function Calling**: Fully supported.
-  - **Effective Capacity**:
-    - **RPM**: Max ~7 full tool-assisted queries/minute.
-    - **RPD**: Max ~750 full tool-assisted queries/day.
-    - **Eval Set Impact**: Running the 25-question test set consumes ~40–50 requests (~3% of daily quota), requiring pacing/delays between tests to respect the 15 RPM ceiling.
+- **Latency**:
+  - *Hosted Gemini API (Assumed, to be benchmarked in Step 9)*: ~1–2s single call → ~2–4s two-call tool cycle.
+  - *Local quantized open model (Assumed, to be benchmarked in Step 9)*: ~4–10s single pass → ~8–20s two-call tool cycle.
+  - *Thinking-Token Overhead (Measured on gemini-3.6-flash)*: ~450 reasoning tokens per short two-sentence query (14 prompt tokens, 43 candidate tokens, 445 thoughts tokens = 502 total tokens).
+
+- **Hosted Model Quotas (Measured from Google AI Studio / Rate Limits Dashboard for Project)**:
+  - **gemini-3.6-flash**:
+    - **RPM**: **5 RPM** *(Measured from dashboard: `1 / 5` limit)*
+    - **RPD**: **20 RPD** *(Measured from dashboard: `4 / 20` limit)*
+    - **TPM**: **250,000 TPM** *(Measured from dashboard: `28 / 250K` limit)*
+    - **Function Calling**: Not verified in local tests yet *(Docs check needed)*
+  - **gemini-3.8-flash**:
+    - **RPM**: **5 RPM** *(Measured from dashboard: `8 / 5` limit)*
+    - **RPD**: **20 RPD** *(Measured from dashboard: `22 / 20` limit and confirmed by real 429 quota exhaustion error)*
+    - **TPM**: **250,000 TPM** *(Measured from dashboard: `112 / 250K` limit)*
+  - **gemini-2.5-flash**:
+    - **Status**: Not available to new users *(Measured: returned HTTP 404 / Model Not Found)*
+
+- **Arithmetic & Impact on the Evaluation Suite**:
+  - **Single Test Set Run Cost**: A full run of `eval/test_set.json` contains 25 questions. With tool and RAG queries requiring two sequential LLM calls (1 tool-selection pass + 1 synthesis pass), running the test set once requires:
+    $$25 \text{ questions} \times 2 \text{ calls} = 50 \text{ to } 55 \text{ calls}$$
+  - **The Bottleneck**: With a strict quota of **20 requests per day (RPD)**, running the 25-question evaluation suite on `gemini-3.6-flash` or `gemini-3.8-flash` in a single day is **mathematically impossible** ($50 > 20$). The daily quota is completely exhausted after only 10 tool-assisted questions ($10 \times 2 = 20$).
+  - **Strategic Architectural Decision**:
+    1. **Evaluation Execution**: The full 25-question automated evaluation suite cannot rely on the hosted Gemini free tier.
+    2. **Local Model Acceleration**: A local open model (served via Ollama or Hugging Face Transformers) must be introduced into the development cycle earlier (or used as the primary engine for automated evaluation runs), while hosted Gemini is reserved for single-turn smoke testing and small manual spot-checks.
+    3. **Pacing for Spot Tests**: Any multi-turn manual testing against the hosted API must strictly respect the **5 RPM** ceiling (at most 2 full tool-calling queries per minute).
 
 ### 3. Guardrail Placement & Breakdown (Plain Code vs. LLM-Dependent)
 Guardrails sit **both before and after** the LLM, split between deterministic Python code and LLM instruction-following:
