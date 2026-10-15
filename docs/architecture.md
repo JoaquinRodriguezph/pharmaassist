@@ -23,7 +23,7 @@ Before the chat service handles any user questions, an offline ingestion script 
 +-----------------+-----------------+
 | Document Chunker                  |
 | (Splitter choice open until       |
-|  Step 5) |
+|  Step 4: LangChain vs LlamaIndex) |
 | Attaches metadata:                |
 |   {source: "file.md",             |
 |    section: "# Heading"}          |
@@ -122,7 +122,7 @@ Before the chat service handles any user questions, an offline ingestion script 
 ## Part 2: Design Decisions & Trade-offs
 
 ### 1. Routing Strategy: LLM Tool Calling vs. Code Router
-- **Choice**: **LLM Tool Calling** (the Orchestrator passes tool schemas for `search_knowledge_base` and tracker endpoints like `get_low_stock_report` to the LLM, and the LLM decides which tool to call).
+- **Choice**: **LLM Tool Calling** (the Orchestrator passes tool schemas for `search_knowledge_base` and tracker endpoints like `get_low_stock` to the LLM, and the LLM decides which tool to call).
 - **Pro**: Handles natural language parameter extraction (e.g., extracting product names, `branch_id`, or `days` until expiry) and compound queries without brittle keyword routing rules.
 - **Con**: Requires two LLM calls per question (one to select the tool and arguments, a second to synthesize the answer from the tool's output), and small quantized local models can occasionally produce malformed tool-call JSON.
 
@@ -182,7 +182,7 @@ Guardrails sit **both before and after** the LLM, split between deterministic Py
 1. **Web Chat Page**: Sends `POST /chat` with `{"session_id": "s1", "message": "Which branch is low on paracetamol 500mg?"}`.
 2. **FastAPI Route Handler**: Validates request schema and passes to Input Guardrail.
 3. **Input Guardrail**: Passes regex checks.
-4. **Orchestrator → Model-Agnostic LLM Interface (LLM Call #1)**: Sends query and tool definitions. The LLM selects `get_low_stock_report(product_query="paracetamol 500mg", branch_id=None)`.
+4. **Orchestrator → Model-Agnostic LLM Interface (LLM Call #1)**: Sends query and tool definitions. The LLM selects `get_low_stock(product_query="paracetamol 500mg", branch_id=None)`.
 5. **Tracker API Tool Client**:
    - Sends an HTTP `GET /reports/low-stock` request to the **Existing Pharmacy Tracker API** (`app/main.py`, with no `branch_id` filter so all branches in `v_low_stock` are checked).
    - **Existing Tracker API & PostgreSQL** query the `v_low_stock` view and return low-stock records containing `branch_name`, `product_name`, `supplier_name`, `batch_number`, `quantity`, and `reorder_level`.
