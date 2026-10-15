@@ -149,11 +149,11 @@ Because every tool-assisted question makes **at least two sequential LLM calls**
 
 - **Arithmetic & Impact on the Evaluation Suite**:
   - **Single Test Set Run Cost**: A full run of `eval/test_set.json` contains 25 questions. With tool and RAG queries requiring two sequential LLM calls (1 tool-selection pass + 1 synthesis pass), running the test set once requires:
-    $$25 \text{ questions} \times 2 \text{ calls} = 50 \text{ to } 55 \text{ calls}$$
+    $$25 \text{ questions} \times 2 \text{ calls} = up to 50 \text{ calls}$$
   - **The Bottleneck**: With a strict quota of **20 requests per day (RPD)**, running the 25-question evaluation suite on `gemini-3.6-flash` or `gemini-3.8-flash` in a single day is **mathematically impossible** ($50 > 20$). The daily quota is completely exhausted after only 10 tool-assisted questions ($10 \times 2 = 20$).
   - **Strategic Architectural Decision**:
     1. **Evaluation Execution**: The full 25-question automated evaluation suite cannot rely on the hosted Gemini free tier.
-    2. **Local Model Acceleration**: A local open model (served via Ollama or Hugging Face Transformers) must be introduced into the development cycle earlier (or used as the primary engine for automated evaluation runs), while hosted Gemini is reserved for single-turn smoke testing and small manual spot-checks.
+    2. **Local Model Acceleration**: A local open model via Ollama will be utilized as the main backend for development and evaluations, while hosted Gemini is reserved for single-turn smoke testing and small manual spot-checks. This is due to a local open model having no maximum queries per day which makes for easier iteration.
     3. **Pacing for Spot Tests**: Any multi-turn manual testing against the hosted API must strictly respect the **5 RPM** ceiling (at most 2 full tool-calling queries per minute).
 
 ### 3. Guardrail Placement & Breakdown (Plain Code vs. LLM-Dependent)
