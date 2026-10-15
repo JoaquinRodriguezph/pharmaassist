@@ -128,8 +128,17 @@ Before the chat service handles any user questions, an offline ingestion script 
 
 ### 2. Impact of Two LLM Calls on Latency and Free-Tier Rate Limits
 Because every tool-assisted question makes **at least two sequential LLM calls**, end-to-end latency roughly doubles and effective rate-limit capacity is cut in half.
-- **Latency (Assumed, to be measured in Step 9)**: If a single hosted Gemini API call takes ~1–2 seconds, a two-call tool loop will take ~2–4 seconds; on a local 4-bit quantized model running on consumer hardware, two sequential passes could take ~8–20+ seconds. Exact p50/p95 latencies for both backends will be benchmarked in Step 9.
-- **Free-Tier Rate Limits (Assumed example, actual quota to be checked in Google AI Studio)**: Because one user question consumes two API requests, a hypothetical 15 Requests Per Minute (RPM) free-tier limit would support at most **7 user questions per minute** before triggering `429 Too Many Requests` errors. Retry/backoff logic and pacing between test cases will be required during automated evaluation runs.
+
+- **Latency (Assumed, to be benchmarked in Step 9)**:
+  - Hosted Gemini API: ~1–2s single call $\rightarrow$ ~2–4s two-call tool cycle.
+  - Local quantized open model: ~4–10s single pass $\rightarrow$ ~8–20s two-call tool cycle.
+- **Hosted Model Quotas (Google AI Studio Free Tier — `gemini-2.5-flash`)**:
+  - **Rate Limits**: 15 Requests Per Minute (RPM), 1,500 Requests Per Day (RPD), 1,000,000 Tokens Per Minute (TPM).
+  - **Function Calling**: Fully supported.
+  - **Effective Capacity**:
+    - **RPM**: Max ~7 full tool-assisted queries/minute.
+    - **RPD**: Max ~750 full tool-assisted queries/day.
+    - **Eval Set Impact**: Running the 25-question test set consumes ~40–50 requests (~3% of daily quota), requiring pacing/delays between tests to respect the 15 RPM ceiling.
 
 ### 3. Guardrail Placement & Breakdown (Plain Code vs. LLM-Dependent)
 Guardrails sit **both before and after** the LLM, split between deterministic Python code and LLM instruction-following:
