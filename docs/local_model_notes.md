@@ -120,7 +120,6 @@ Run through `OllamaClient` with `scripts/try_ollama.py` (model `llama3.2:latest`
 - **[Observed]** The sentence count is approximate: the script's splitter counts list items, which inflates the no-system figure of 7.
 - **[Observed]** The long answer includes example reorder levels (10-20, 50-100 and 200-500 units) presented as common, with no source. The short answer does not mention insurance.
 - **[Derived]** Prompt tokens: 46 − 33 = 13 added by the system prompt, the same difference as in the earlier two-sentence version. It includes any chat-template tokens the system role adds, which cannot be separated here. 37 − 33 = 4 is the extra from "In two sentences, " in the other prompt.
-- **Prediction vs result.** The prediction written in the script before running was: no system prompt gives 3 or more sentences (right), and with the system prompt the answer is shorter but not strictly obeyed (wrong: it was exactly one sentence).
 
 ### Prompt tokens
 - **[Observed]** The 37 prompt tokens in experiments 1 and 2 match the count from Runs 1 and 2 earlier and do not drop on repeated calls, which is consistent with Ollama's count including cached prompt tokens.
@@ -129,6 +128,7 @@ Run through `OllamaClient` with `scripts/try_ollama.py` (model `llama3.2:latest`
 1. **Wrong host.** `$env:OLLAMA_HOST="http://localhost:11999"; py scripts/try_ollama.py`, then `Remove-Item Env:OLLAMA_HOST`.
    - **[Measured]** On the first call: `ERROR: Could not reach the Ollama server at http://localhost:11999. Is it running? Start it (or check OLLAMA_HOST) and try again.` No traceback. Exit code `1` (`$LASTEXITCODE`), from a re-run of this test.
    - **[Observed]** The `LLMConnectionError` message appeared as intended. The real environment variable overrode the value in `.env`.
+   - **Wrong-host re-run [Measured]**, after the handler became `except LLMError`: the same one-line `ERROR: Could not reach the Ollama server at http://localhost:11999. Is it running? Start it (or check OLLAMA_HOST) and try again.`, no traceback, exit code `1`. **Confirmed:** both backend error types print as one line with exit code 1 through the shared `LLMError` handler.
 2. **Wrong model.** `$env:OLLAMA_MODEL="no-such-model"; py scripts/try_ollama.py`, then `Remove-Item Env:OLLAMA_MODEL`.
    - **[Measured]** Raw traceback ending in `ollama._types.ResponseError: model 'no-such-model' not found (status code: 404)`.
    - **Decision:** `OllamaClient` should translate this. Callers should not need to catch an `ollama` package exception, the model name comes from config so this mistake is likely, and the message can name the fix. A 404 is now raised as `LLMModelNotFoundError` ("Ollama has no model '...'. Run `ollama pull ...` or check OLLAMA_MODEL."). Other `ResponseError`s pass through unchanged. Both error types now share an `LLMError` base class (confirmed below). The script is meant to catch it so that any backend error prints as one `ERROR:` line; this is confirmed by Re-run 3 below.
@@ -137,7 +137,7 @@ Run through `OllamaClient` with `scripts/try_ollama.py` (model `llama3.2:latest`
    - **Fix:** in `scripts/try_ollama.py`, import `LLMError` and use `except LLMError as e:`. Confirmed by Re-run 3.
    - **Re-run 2 [Measured]:** the output was the same traceback as Re-run 1 (same line numbers, ending in `LLMModelNotFoundError`), exit code `1`. **[Observed]** The script still did not catch the error, so the `except LLMError` fix is not in effect in the file that ran (possible causes: edit not saved, or the import/`except` lines not both changed).
    - **File check [Measured]:** `Select-String -Path scripts\try_ollama.py -Pattern "LLMError|LLMConnectionError"` found only `LLMError`: line 20 `from app.llm import LLMError, LLMResponse` and line 97 `except LLMError as e:`. **[Observed]** The edit is now in the file, so Re-run 2 most likely ran before it was saved (inferred, not shown). 
-   - **Re-run 3 [Measured]:** after the edit, the same test printed no traceback, only `ERROR: Ollama has no model 'no-such-model'. Run `ollama pull no-such-model` or check OLLAMA_MODEL.`, and exit code `1`. **Confirmed:** a wrong model name now fails with a one-line error and exit code 1, the same as a wrong host. The wrong-host test has not been re-run since the handler became `except LLMError`; it should still work because `LLMConnectionError` is a subclass (see the class hierarchy check), but that is not yet observed.
+   - **Re-run 3 [Measured]:** after the edit, the same test printed no traceback, only `ERROR: Ollama has no model 'no-such-model'. Run `ollama pull no-such-model` or check OLLAMA_MODEL.`, and exit code `1`. **Confirmed:** a wrong model name now fails with a one-line error and exit code 1, the same as a wrong host.
 3. **Class hierarchy [Measured]:** `issubclass(LLMConnectionError, LLMError)` and `issubclass(LLMModelNotFoundError, LLMError)` both print `True`.
 
 ### `.env.example` (Ollama lines only)
