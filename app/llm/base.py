@@ -32,6 +32,10 @@ class LLMConnectionError(Exception):
     """The backend could not be reached (e.g. the server is not running)."""
 
 
+class LLMModelNotFoundError(Exception):
+    """The backend is reachable but does not have the requested model."""
+
+
 class LLMClient(ABC):
     """Interface every LLM backend implements."""
 
