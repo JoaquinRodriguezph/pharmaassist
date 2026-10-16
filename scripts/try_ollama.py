@@ -17,7 +17,7 @@ try:
 except ImportError:
     pass  # fall back to variables already set in the environment
 
-from app.llm import LLMConnectionError, LLMResponse
+from app.llm import LLMError, LLMResponse
 from app.llm.ollama_client import OllamaClient
 
 PROMPT = "In two sentences, what does a pharmacy reorder level mean?"
@@ -94,6 +94,6 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except LLMConnectionError as e:
+    except LLMError as e:
         print(f"ERROR: {e}")
         sys.exit(1)
