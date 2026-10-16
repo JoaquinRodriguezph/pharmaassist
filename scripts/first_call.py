@@ -214,7 +214,7 @@ def run_self_tests():
                                 "location": "global",
                                 "model": "gemini-3.8-flash"
                             },
-                            "quotaValue": "15"
+                            "quotaValue": "5"
                         }
                     ]
                 },

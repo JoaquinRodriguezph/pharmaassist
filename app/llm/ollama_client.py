@@ -7,7 +7,13 @@ import time
 
 import ollama
 
-from app.llm.base import LLMClient, LLMConnectionError, LLMResponse, Message
+from app.llm.base import (
+    LLMClient,
+    LLMConnectionError,
+    LLMModelNotFoundError,
+    LLMResponse,
+    Message,
+)
 
 
 def _require_env(name: str) -> str:
@@ -52,6 +58,13 @@ class OllamaClient(LLMClient):
                 f"Could not reach the Ollama server at {self.host}. "
                 "Is it running? Start it (or check OLLAMA_HOST) and try again."
             ) from exc
+        except ollama.ResponseError as exc:
+            if exc.status_code == 404:
+                raise LLMModelNotFoundError(
+                    f"Ollama has no model '{self.model}'. Run `ollama pull {self.model}` "
+                    "or check OLLAMA_MODEL."
+                ) from exc
+            raise
         latency = time.perf_counter() - start
 
         return LLMResponse(
