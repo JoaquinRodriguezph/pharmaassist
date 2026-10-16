@@ -132,14 +132,14 @@ Because every tool-assisted question makes **at least two sequential LLM calls**
 - **Latency**:
   - *Hosted Gemini API (Assumed, to be benchmarked in Step 9)*: ~1–2s single call → ~2–4s two-call tool cycle.
   - *Local quantized open model (Assumed, to be benchmarked in Step 9)*: ~4–10s single pass → ~8–20s two-call tool cycle.
-  - *Thinking-Token Overhead (Measured on gemini-3.6-flash)*: ~450 reasoning tokens per short two-sentence query (14 prompt tokens, 43 candidate tokens, 445 thoughts tokens = 502 total tokens).
+  - *Thinking-Token Overhead (Based from docs on gemini-3.6-flash)*: ~450 reasoning tokens per short two-sentence query (14 prompt tokens, 43 candidate tokens, 445 thoughts tokens = 502 total tokens).
 
 - **Hosted Model Quotas (Measured from Google AI Studio / Rate Limits Dashboard for Project)**:
   - **gemini-3.6-flash**:
     - **RPM**: **5 RPM** *(Measured from dashboard: `1 / 5` limit)*
     - **RPD**: **20 RPD** *(Measured from dashboard: `4 / 20` limit)*
     - **TPM**: **250,000 TPM** *(Measured from dashboard: `28 / 250K` limit)*
-    - **Function Calling**: Not verified in local tests yet *(Docs check needed)*
+    - **Function Calling**:It is supported accorting to the docs 
   - **gemini-3.8-flash**:
     - **RPM**: **5 RPM** *(Measured from dashboard: `8 / 5` limit)*
     - **RPD**: **20 RPD** *(Measured from dashboard: `22 / 20` limit and confirmed by real 429 quota exhaustion error)*
@@ -149,7 +149,7 @@ Because every tool-assisted question makes **at least two sequential LLM calls**
 
 - **Arithmetic & Impact on the Evaluation Suite**:
   - **Single Test Set Run Cost**: A full run of `eval/test_set.json` contains 25 questions. With tool and RAG queries requiring two sequential LLM calls (1 tool-selection pass + 1 synthesis pass), running the test set once requires:
-    $$25 \text{ questions} \times 2 \text{ calls} = up to 50 \text{ calls}$$
+    $$25 \text{ questions} \times 2 \text{ calls} = \text{up to } 5050 \text{ calls}$$
   - **The Bottleneck**: With a strict quota of **20 requests per day (RPD)**, running the 25-question evaluation suite on `gemini-3.6-flash` or `gemini-3.8-flash` in a single day is **mathematically impossible** ($50 > 20$). The daily quota is completely exhausted after only 10 tool-assisted questions ($10 \times 2 = 20$).
   - **Strategic Architectural Decision**:
     1. **Evaluation Execution**: The full 25-question automated evaluation suite cannot rely on the hosted Gemini free tier.
