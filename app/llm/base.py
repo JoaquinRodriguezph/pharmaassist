@@ -28,11 +28,15 @@ class LLMResponse:
     model: str | None = None
 
 
-class LLMConnectionError(Exception):
+class LLMError(Exception):
+    """Base class for errors raised by any LLM backend."""
+
+
+class LLMConnectionError(LLMError):
     """The backend could not be reached (e.g. the server is not running)."""
 
 
-class LLMModelNotFoundError(Exception):
+class LLMModelNotFoundError(LLMError):
     """The backend is reachable but does not have the requested model."""
 
 

@@ -82,7 +82,7 @@ Labels: **Measured** = read directly from a tool's output. **Derived** = calcula
 > "A pharmacy reorder level is a predetermined quantity of a medication that a pharmacy is willing to hold in stock before reordering from the manufacturer. This level can vary depending on the pharmacy and the medication, but it is typically a specific quantity (e.g. 10, 20, or 50 units) that the pharmacy has agreed to maintain in stock to ensure that patients can receive their prescribed medication."
 
 ### Observed
-- The same prompt produced two different answers. The difference comes from sampling.
+- The same prompt produced two different answers. The difference is probably sampling (tested at temperature 0; see Sampling test).
 - Response 1 is wrong: it says the reorder level is set by "the patient's insurance plan". A reorder level is an inventory threshold the pharmacy sets for itself.
 - Gemini answered the same prompt correctly.
 - A 3B model answering from memory will be unreliable on pharmacy facts. That is why grounding it with RAG (Steps 3 to 5) and measuring the results (Step 9) are the core of this project.
@@ -91,40 +91,51 @@ Labels: **Measured** = read directly from a tool's output. **Derived** = calcula
 
 ## Sampling test
 
-Run through `OllamaClient` with `scripts/try_ollama.py` (model `llama3.2:latest`). Parts 1 to 3 ran in two separate successful executions. Labels as above.
+Run through `OllamaClient` with `scripts/try_ollama.py` (model `llama3.2:latest`). Labels as above.
 
-Prompt: *"In two sentences, what does a pharmacy reorder level mean?"*
+**Executions covered:** one execution of the current script, the output pasted most recently. Figures from earlier executions are not used here. "Run" means one `generate()` call.
 
-### Temperature 0.0
-- **[Measured]** Two runs per execution gave identical text (68 completion tokens, 37 prompt tokens each). Counting the "no system prompt" run in part 3 (same settings), all 6 temperature-0 runs across both executions gave the same text.
-- **[Measured]** Latency of the first call was 5.51 s in one execution and 2.76 s in the other; every later call took 0.51 to 0.73 s.
+### Experiments 1 and 2: temperature (prompt: *"In two sentences, what does a pharmacy reorder level mean?"*)
+- **[Measured]** Temperature 0.0, two runs: identical text, 68 completion tokens and 37 prompt tokens each.
+- **[Measured]** Temperature 1.5, two runs: different texts, 73 and 87 completion tokens.
+- **[Observed]** The two temperature-1.5 texts differ in substance, not only wording. Run 1 says restocking triggers when the level "is reached or exceeded"; run 2 describes demand, not stock, falling below the level.
+- **[Measured]** Latency: 5.48 s for the first call, then 0.73 to 0.89 s for the others in these two experiments.
 - **[Observed]** The slow first call is probably warm-up. I did not isolate it (cold start was not measured).
 
-### Temperature 1.5
-- **[Measured]** 4 runs (2 per execution) gave 4 different texts, with 62, 61, 62 and 75 completion tokens.
-- **[Observed]** The texts differ in substance, not only wording. One says the level is the quantity a pharmacy "must sell" before reordering; another says reordering happens when the pharmacy "sells out".
-
 ### The persistent error
-- **[Observed]** The earlier Response 1 said the reorder level is set by "the patient's insurance plan". All 6 temperature-0 runs repeat that claim, and both system-prompt runs repeat it ("insurance provider"). None of the 4 temperature-1.5 runs mention insurance.
-- **[Observed]** So the error is not a sampling accident. It is what the model most likely says, and temperature 0 makes it repeatable. Identical answers at temperature 0 show consistency, not correctness. This is another reason for RAG (Steps 3 to 5) and measurement (Step 9).
+- **[Observed]** The earlier Response 1 said the reorder level is set by "the patient's insurance plan". Both temperature-0 runs here repeat it ("set by the pharmacy or the patient's insurance plan"). Neither temperature-1.5 run mentions insurance.
+- **[Observed]** So at temperature 0, for this prompt, the wrong claim is the model's most likely answer, and temperature 0 makes it repeatable. Identical answers at temperature 0 show consistency, not correctness. This is another reason for RAG (Steps 3 to 5) and measurement (Step 9). Two runs is a small sample.
 
-### System prompt (part 3, temperature 0.0)
-- **[Measured]** No system prompt: 68 completion tokens, 2 sentences. With "You are a pharmacy operations assistant. Answer in one short sentence.": 52 completion tokens, still 2 sentences. Both results were the same in both executions.
-- **[Observed]** This is not a clean test of the length instruction, because the user prompt says "in two sentences" and the system prompt says "one short sentence". The model produced two sentences, so the user prompt won, though the answer got shorter.
-- Part 4 of the script removes the conflict ("What does a pharmacy reorder level mean?", temperature 0, with and without the system prompt). **Not yet run.**
+### Experiment 3: length instruction without a conflict (prompt: *"What does a pharmacy reorder level mean?"*, temperature 0.0)
+
+| | No system prompt | System prompt ("You are a pharmacy operations assistant. Answer in one short sentence.") |
+|---|---|---|
+| Completion tokens [Measured] | 238 | 32 |
+| Prompt tokens [Measured] | 33 | 46 |
+| Latency [Measured] | 2.38 s | 0.34 s |
+| Words [Measured, script count] | 190 | 29 |
+| Approx. sentences [script count] | 7 | 1 |
+
+- **[Observed]** The system-prompt answer is one sentence, so the 3B model obeyed the length instruction here. One prompt, one run per condition, temperature 0: this does not show how reliable that is.
+- **[Observed]** The sentence count is approximate: the script's splitter counts list items, which inflates the no-system figure of 7.
+- **[Observed]** The long answer includes example reorder levels (10-20, 50-100 and 200-500 units) presented as common, with no source. The short answer does not mention insurance.
+- **[Derived]** Prompt tokens: 46 − 33 = 13 added by the system prompt, the same difference as in the earlier two-sentence version. It includes any chat-template tokens the system role adds, which cannot be separated here. 37 − 33 = 4 is the extra from "In two sentences, " in the other prompt.
+- **Prediction vs result.** The prediction written in the script before running was: no system prompt gives 3 or more sentences (right), and with the system prompt the answer is shorter but not strictly obeyed (wrong: it was exactly one sentence).
 
 ### Prompt tokens
-- **[Measured]** `prompt_tokens`: 37 without a system prompt, 50 with one.
-- **[Derived]** 50 − 37 = 13 tokens added by the system prompt. This includes any chat-template tokens the system role adds; the two cannot be separated from these numbers.
-- **[Observed]** 37 matches the prompt count from Runs 1 and 2 earlier and does not drop on repeated calls, which is consistent with Ollama's count including cached prompt tokens.
+- **[Observed]** The 37 prompt tokens in experiments 1 and 2 match the count from Runs 1 and 2 earlier and do not drop on repeated calls, which is consistent with Ollama's count including cached prompt tokens.
 
 ### Failure tests
 1. **Wrong host.** `$env:OLLAMA_HOST="http://localhost:11999"; py scripts/try_ollama.py`, then `Remove-Item Env:OLLAMA_HOST`.
-   - **[Measured]** On the first call: `ERROR: Could not reach the Ollama server at http://localhost:11999. Is it running? Start it (or check OLLAMA_HOST) and try again.` No traceback; exit code 1.
+   - **[Measured]** On the first call: `ERROR: Could not reach the Ollama server at http://localhost:11999. Is it running? Start it (or check OLLAMA_HOST) and try again.` No traceback. Exit code `1` (`$LASTEXITCODE`), from a re-run of this test.
    - **[Observed]** The `LLMConnectionError` message appeared as intended. The real environment variable overrode the value in `.env`.
 2. **Wrong model.** `$env:OLLAMA_MODEL="no-such-model"; py scripts/try_ollama.py`, then `Remove-Item Env:OLLAMA_MODEL`.
    - **[Measured]** Raw traceback ending in `ollama._types.ResponseError: model 'no-such-model' not found (status code: 404)`.
-   - **Decision:** `OllamaClient` should translate this. Callers should not need to catch an `ollama` package exception, the model name comes from config so this mistake is likely, and the message can name the fix. A 404 is now raised as `LLMModelNotFoundError` ("Ollama has no model '...'. Run `ollama pull ...` or check OLLAMA_MODEL."). Other `ResponseError`s pass through unchanged. **Implemented after this test and not yet re-run against the real server.**
+   - **Decision:** `OllamaClient` should translate this. Callers should not need to catch an `ollama` package exception, the model name comes from config so this mistake is likely, and the message can name the fix. A 404 is now raised as `LLMModelNotFoundError` ("Ollama has no model '...'. Run `ollama pull ...` or check OLLAMA_MODEL."). Other `ResponseError`s pass through unchanged. Both error types now share an `LLMError` base class, which `scripts/try_ollama.py` catches, so any backend error should print as one `ERROR:` line.
+   - **Re-run 1 [Measured]:** the traceback ended in `app.llm.base.LLMModelNotFoundError: Ollama has no model 'no-such-model'. Run `ollama pull no-such-model` or check OLLAMA_MODEL.` (chained from the original `ResponseError ... (status code: 404)`), exit code `1`.
+   - **[Observed]** The translation in `OllamaClient` works. The error was not caught by the script, so a traceback printed instead of the one-line message. The script's handler still caught only `LLMConnectionError` (inferred from the behavior; the line numbers match the updated script, so only the import and `except` lines were stale).
+   - **Fix:** in `scripts/try_ollama.py`, import `LLMError` and use `except LLMError as e:`. **One-line output for the wrong-model case not yet confirmed; re-run after the fix.**
+3. **Class hierarchy [Measured]:** `issubclass(LLMConnectionError, LLMError)` and `issubclass(LLMModelNotFoundError, LLMError)` both print `True`.
 
 ### `.env.example` (Ollama lines only)
 ```
@@ -133,105 +144,4 @@ OLLAMA_MODEL=llama3.2:latest
 OLLAMA_HOST=http://localhost:11434
 ```
 
-### `scripts/try_ollama.py`
-Parts 1 to 3 gave the results above; part 4 was added afterwards.
-
-```python
-"""Manual check of OllamaClient: determinism, sampling, and system prompt.
-
-Run from the project root:  py scripts/try_ollama.py
-"""
-
-import re
-import sys
-from pathlib import Path
-
-# Make `app` importable when running this file directly from the project root.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-try:
-    from dotenv import load_dotenv
-
-    load_dotenv()
-except ImportError:
-    pass  # fall back to variables already set in the environment
-
-from app.llm import LLMConnectionError, LLMResponse
-from app.llm.ollama_client import OllamaClient
-
-PROMPT = "In two sentences, what does a pharmacy reorder level mean?"
-PROMPT_NO_LENGTH = "What does a pharmacy reorder level mean?"
-HIGH_TEMPERATURE = 1.5
-SYSTEM_PROMPT = (
-    "You are a pharmacy operations assistant. Answer in one short sentence."
-)
-
-
-def ask(
-    client: OllamaClient,
-    temperature: float,
-    system: str | None = None,
-    prompt: str = PROMPT,
-) -> LLMResponse:
-    return client.generate(
-        [{"role": "user", "content": prompt}],
-        system=system,
-        temperature=temperature,
-    )
-
-
-def show(label: str, r: LLMResponse) -> None:
-    print(f"--- {label}")
-    print(r.text.strip())
-    print(
-        f"[model={r.model} prompt_tokens={r.prompt_tokens} "
-        f"completion_tokens={r.completion_tokens} latency={r.latency_seconds:.2f}s]\n"
-    )
-
-
-def length_stats(text: str) -> str:
-    sentences = [s for s in re.split(r"(?<=[.!?])\s+", text.strip()) if s]
-    return f"    words={len(text.split())} approx_sentences={len(sentences)}\n"
-
-
-def compare(a: LLMResponse, b: LLMResponse) -> None:
-    same = a.text.strip() == b.text.strip()
-    print(f"==> Identical: {'YES' if same else 'NO'}\n")
-
-
-def main() -> None:
-    client = OllamaClient()
-
-    print(f"PROMPT: {PROMPT}\n")
-
-    print("=== 1. temperature=0.0, same prompt twice ===")
-    a, b = ask(client, 0.0), ask(client, 0.0)
-    show("run 1", a)
-    show("run 2", b)
-    compare(a, b)
-
-    print(f"=== 2. temperature={HIGH_TEMPERATURE}, same prompt twice ===")
-    a, b = ask(client, HIGH_TEMPERATURE), ask(client, HIGH_TEMPERATURE)
-    show("run 1", a)
-    show("run 2", b)
-    compare(a, b)
-
-    print("=== 3. system prompt (temperature=0.0) ===")
-    show("no system prompt", ask(client, 0.0))
-    show(f'system: "{SYSTEM_PROMPT}"', ask(client, 0.0, system=SYSTEM_PROMPT))
-
-    print("=== 4. length instruction, no conflicting prompt (temperature=0.0) ===")
-    print(f"PROMPT: {PROMPT_NO_LENGTH}\n")
-    for label, system in [("no system prompt", None), (f'system: "{SYSTEM_PROMPT}"', SYSTEM_PROMPT)]:
-        r = ask(client, 0.0, system=system, prompt=PROMPT_NO_LENGTH)
-        show(label, r)
-        print(length_stats(r.text))
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except LLMConnectionError as e:
-        print(f"ERROR: {e}")
-        sys.exit(1)
-```
+The script itself is in the repo (`scripts/try_ollama.py`) and is not copied here.
