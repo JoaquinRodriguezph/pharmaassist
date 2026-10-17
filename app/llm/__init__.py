@@ -9,6 +9,7 @@ from app.llm.base import (
     LLMConnectionError,
     LLMError,
     LLMModelNotFoundError,
+    LLMRateLimitError,
     LLMResponse,
     Message,
 )
@@ -18,6 +19,7 @@ __all__ = [
     "LLMConnectionError",
     "LLMError",
     "LLMModelNotFoundError",
+    "LLMRateLimitError",
     "LLMResponse",
     "Message",
 ]

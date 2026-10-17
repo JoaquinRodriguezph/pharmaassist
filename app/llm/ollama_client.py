@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import time
 
 import ollama
@@ -14,13 +13,7 @@ from app.llm.base import (
     LLMResponse,
     Message,
 )
-
-
-def _require_env(name: str) -> str:
-    value = os.environ.get(name)
-    if not value:
-        raise ValueError(f"Environment variable {name} is not set (see .env.example).")
-    return value
+from app.llm.env import require_env
 
 
 class OllamaClient(LLMClient):
@@ -28,8 +21,8 @@ class OllamaClient(LLMClient):
     (OLLAMA_MODEL, OLLAMA_HOST) unless passed explicitly."""
 
     def __init__(self, model: str | None = None, host: str | None = None) -> None:
-        self.model = model or _require_env("OLLAMA_MODEL")
-        self.host = host or _require_env("OLLAMA_HOST")
+        self.model = model or require_env("OLLAMA_MODEL")
+        self.host = host or require_env("OLLAMA_HOST")
         self._client = ollama.Client(host=self.host)
 
     def generate(

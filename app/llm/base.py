@@ -19,6 +19,15 @@ class LLMResponse:
     """Result of one generate() call.
 
     Backends fill in what they know and leave the rest as None.
+
+    Design decision on hidden "thinking" tokens: `reasoning_tokens` is a
+    separate optional field (None when a backend reports none, as Ollama does)
+    and `completion_tokens` counts only the visible answer. Folding them
+    together would hide what drives cost and latency in an evaluation report
+    (a 40-token answer that cost ~450 thinking tokens would look like 490),
+    and dropping them would understate cost, since Gemini bills thinking at
+    the output rate; a separate field lets the report show visible length,
+    total output (completion + reasoning) and latency side by side.
     """
 
     text: str
@@ -26,6 +35,7 @@ class LLMResponse:
     completion_tokens: int | None = None
     latency_seconds: float | None = None
     model: str | None = None
+    reasoning_tokens: int | None = None
 
 
 class LLMError(Exception):
@@ -38,6 +48,10 @@ class LLMConnectionError(LLMError):
 
 class LLMModelNotFoundError(LLMError):
     """The backend is reachable but does not have the requested model."""
+
+
+class LLMRateLimitError(LLMError):
+    """The backend refused the request because of quota or rate limits."""
 
 
 class LLMClient(ABC):
