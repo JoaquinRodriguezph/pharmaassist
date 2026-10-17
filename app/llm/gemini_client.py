@@ -1,10 +1,12 @@
 """Gemini backend: translates LLMClient calls to and from the `google-genai` SDK.
 
-Checked against the SDK docs (googleapis.github.io/python-genai): the system
-prompt, temperature and output-token limit go in
+Read from the SDK docs (googleapis.github.io/python-genai), not yet confirmed
+by a live call: the system prompt, temperature and output-token limit go in
 `config=types.GenerateContentConfig(system_instruction=..., temperature=...,
 max_output_tokens=...)`; `contents` is a list of `types.Content`; and the
-assistant's role is "model", not "assistant". Retries use call_with_retry with
+assistant's role is "model", not "assistant". The unit tests build the real
+`types` objects, which checks field names but not that the live API accepts
+them. Retries use call_with_retry with
 classify_gemini_error; after retries, SDK errors callers should not need to
 know about are translated to LLMError subclasses.
 """
@@ -35,8 +37,8 @@ _ROLES = {"user": "user", "assistant": "model"}
 
 
 class GeminiClient(LLMClient):
-    """Calls the Gemini API. With no arguments, reads LLM_API_KEY and LLM_MODEL
-    from the environment.
+    """Calls the Gemini API. With no arguments, reads GEMINI_API_KEY and
+    GEMINI_MODEL from the environment.
 
     `client` (anything with `.models.generate_content(...)`), `sleep` and
     `clock` can be injected so tests run without the network or real waiting.
@@ -51,9 +53,9 @@ class GeminiClient(LLMClient):
         clock: Callable[[], float] = time.perf_counter,
         max_attempts: int = 4,
     ) -> None:
-        self.model = model or require_env("LLM_MODEL")
+        self.model = model or require_env("GEMINI_MODEL")
         if client is None:
-            client = genai.Client(api_key=api_key or require_env("LLM_API_KEY"))
+            client = genai.Client(api_key=api_key or require_env("GEMINI_API_KEY"))
         self._client = client
         self._sleep = sleep
         self._clock = clock
@@ -118,7 +120,7 @@ class GeminiClient(LLMClient):
             if exc.code == 404:
                 raise LLMModelNotFoundError(
                     f"Gemini has no model '{self.model}' for this API key. "
-                    "Check LLM_MODEL."
+                    "Check GEMINI_MODEL."
                 ) from exc
             if exc.code == 429:
                 raise LLMRateLimitError(self._rate_limit_message(exc)) from exc

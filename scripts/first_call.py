@@ -22,14 +22,14 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     load_dotenv()
-    api_key = os.getenv("LLM_API_KEY")
-    model_name = os.getenv("LLM_MODEL")
+    api_key = os.getenv("GEMINI_API_KEY")
+    model_name = os.getenv("GEMINI_MODEL")
 
     if not api_key:
-        print("Error: LLM_API_KEY is not set in the environment or .env file.", file=sys.stderr)
+        print("Error: GEMINI_API_KEY is not set in the environment or .env file.", file=sys.stderr)
         sys.exit(1)
     if not model_name:
-        print("Error: LLM_MODEL is not set in the environment or .env file.", file=sys.stderr)
+        print("Error: GEMINI_MODEL is not set in the environment or .env file.", file=sys.stderr)
         sys.exit(1)
 
     client = genai.Client(api_key=api_key)

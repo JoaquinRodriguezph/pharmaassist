@@ -222,6 +222,7 @@ def test_404_becomes_model_not_found():
         client.generate([USER_MSG])
 
     assert "test-model" in str(exc_info.value)
+    assert "GEMINI_MODEL" in str(exc_info.value)  # tells the user which setting to fix
     assert exc_info.value.__cause__ is original
     assert len(fake.models.calls) == 1
     assert sleeps == []
@@ -292,7 +293,7 @@ def test_503_twice_then_success_uses_injected_sleep():
 # ---------------------------------------------------------------------------
 
 def test_model_comes_from_env_when_not_given(monkeypatch):
-    monkeypatch.setenv("LLM_MODEL", "env-model")
+    monkeypatch.setenv("GEMINI_MODEL", "env-model")
 
     client = GeminiClient(client=FakeClient(fake_response()))
 
@@ -300,21 +301,21 @@ def test_model_comes_from_env_when_not_given(monkeypatch):
 
 
 def test_missing_model_gives_clear_error(monkeypatch):
-    monkeypatch.delenv("LLM_MODEL", raising=False)
+    monkeypatch.delenv("GEMINI_MODEL", raising=False)
 
-    with pytest.raises(ValueError, match="LLM_MODEL"):
+    with pytest.raises(ValueError, match="GEMINI_MODEL"):
         GeminiClient(client=FakeClient())
 
 
 def test_missing_api_key_gives_clear_error(monkeypatch):
-    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
 
-    with pytest.raises(ValueError, match="LLM_API_KEY"):
+    with pytest.raises(ValueError, match="GEMINI_API_KEY"):
         GeminiClient(model="test-model")  # no client injected, so a key is needed
 
 
 def test_injected_client_needs_no_api_key(monkeypatch):
-    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
 
     GeminiClient(model="test-model", client=FakeClient())  # must not raise
 

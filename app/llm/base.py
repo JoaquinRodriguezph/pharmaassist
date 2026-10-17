@@ -25,9 +25,10 @@ class LLMResponse:
     and `completion_tokens` counts only the visible answer. Folding them
     together would hide what drives cost and latency in an evaluation report
     (a 40-token answer that cost ~450 thinking tokens would look like 490),
-    and dropping them would understate cost, since Gemini bills thinking at
-    the output rate; a separate field lets the report show visible length,
-    total output (completion + reasoning) and latency side by side.
+    and dropping them would hide tokens that Gemini counts in its total (see
+    the Gemini pricing docs for how they are billed); a separate field lets
+    the report show visible length, total output (completion + reasoning) and
+    latency side by side.
     """
 
     text: str
