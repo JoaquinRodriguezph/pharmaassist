@@ -15,7 +15,7 @@ Return decisions are made at the counter and apply in the same way at every bran
 1. Prescription medications cannot be returned or refunded once they have left the pharmacy counter. This includes all antibiotics, such as amoxicillin, even when the box is unopened and the customer has the receipt.
 2. A dispensed prescription item is eligible for replacement only when it is damaged or is covered by a manufacturer recall.
 3. Unopened over-the-counter (OTC) items and vitamins with an intact tamper seal and the original receipt may be returned or exchanged within 7 calendar days of the purchase date.
-4. Cold-chain items and prescription drugs are excluded from the 7-day return window.
+4. Cold-chain items and prescription drugs are excluded from this return period.
 
 If a return cannot be accepted, explain the reason politely, and offer to ask the supervising pharmacist to speak with the customer.
 

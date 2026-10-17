@@ -1,7 +1,12 @@
-"""Check that every section cited in eval/test_set.json exists in the knowledge base.
+"""Check the knowledge base against eval/test_set.json.
 
-Run from the project root:  py scripts/check_kb.py
-Exit status 1 if any cited file or section is missing.
+For every `expected_sources` entry: the file must exist, it must have the
+section heading, and the section's text must contain each of the question's
+`must_contain` strings (case-insensitive). Run from the project root:
+
+    py scripts/check_kb.py
+
+Prints each problem and exits with status 1 if there are any.
 """
 
 import argparse
@@ -12,7 +17,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from app.rag.kb import check_sources, expected_sources
+from app.rag.kb import check_sources, expected_sources, required_strings
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -23,11 +28,17 @@ def main(argv: list[str] | None = None) -> int:
 
     test_set = json.loads(args.test_set.read_text(encoding="utf-8"))
     sources = expected_sources(test_set)
-    problems = check_sources(args.kb_dir, sources)
+    try:
+        required = required_strings(test_set)
+    except ValueError as error:
+        print(f"ERROR in {args.test_set.name}: {error}")
+        return 1
+    problems = check_sources(args.kb_dir, sources, required)
 
     for problem in problems:
         print(f"MISSING: {problem}")
-    print(f"Checked {len(sources)} cited section(s): {len(problems)} problem(s).")
+    facts = sum(len(strings) for strings in required.values())
+    print(f"Checked {len(sources)} cited section(s) and {facts} required string(s): {len(problems)} problem(s).")
     return 1 if problems else 0
 
 

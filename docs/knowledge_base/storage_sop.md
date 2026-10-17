@@ -10,7 +10,7 @@ This standard operating procedure describes how medicines and health products ar
 
 ## Temperature Monitoring
 
-Ambient store and stockroom temperature must be maintained between 15°C and 25°C.
+Ambient store and stockroom temperature must be maintained within 15°C–25°C.
 
 1. Staff must check and record temperatures twice daily, at 8:00 AM and at 4:00 PM.
 2. Each reading is written on the room temperature log sheet with the time, the temperature and the initials of the person who took it.

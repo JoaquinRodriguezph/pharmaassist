@@ -7,6 +7,11 @@
     "expected_sources": [
       "returns_and_expiry_policy.md#Customer-Returns"
     ],
+    "must_contain": [
+      "antibiotics",
+      "cannot be returned or refunded",
+      "receipt"
+    ],
     "expected_tool": null,
     "expected_args": null,
     "setup_turns": [],
@@ -20,6 +25,12 @@
     "expected_route": "rag",
     "expected_sources": [
       "returns_and_expiry_policy.md#Expired-Medications"
+    ],
+    "must_contain": [
+      "90 days",
+      "30 days",
+      "quarantine bin",
+      "batch number"
     ],
     "expected_tool": null,
     "expected_args": null,
@@ -35,6 +46,11 @@
     "expected_sources": [
       "returns_and_expiry_policy.md#Customer-Returns"
     ],
+    "must_contain": [
+      "7 calendar days",
+      "tamper seal",
+      "original receipt"
+    ],
     "expected_tool": null,
     "expected_args": null,
     "setup_turns": [],
@@ -48,6 +64,12 @@
     "expected_route": "rag",
     "expected_sources": [
       "storage_sop.md#Cold-Chain-And-Excursions"
+    ],
+    "must_contain": [
+      "2°C–8°C",
+      "30 minutes",
+      "DO NOT DISPENSE - QUARANTINE",
+      "supervising pharmacist"
     ],
     "expected_tool": null,
     "expected_args": null,
@@ -63,6 +85,11 @@
     "expected_sources": [
       "storage_sop.md#Temperature-Monitoring"
     ],
+    "must_contain": [
+      "15°C–25°C",
+      "8:00 AM",
+      "4:00 PM"
+    ],
     "expected_tool": null,
     "expected_args": null,
     "setup_turns": [],
@@ -76,6 +103,11 @@
     "expected_route": "rag",
     "expected_sources": [
       "paracetamol_leaflet.md#Dosage-And-Administration"
+    ],
+    "must_contain": [
+      "8 tablets",
+      "4000 mg",
+      "at least 4 hours"
     ],
     "expected_tool": null,
     "expected_args": null,
@@ -91,6 +123,12 @@
     "expected_sources": [
       "paracetamol_leaflet.md#Warnings-And-Precautions"
     ],
+    "must_contain": [
+      "hepatotoxicity",
+      "liver damage",
+      "alcohol",
+      "cold and flu"
+    ],
     "expected_tool": null,
     "expected_args": null,
     "setup_turns": [],
@@ -104,6 +142,12 @@
     "expected_route": "rag",
     "expected_sources": [
       "ibuprofen_leaflet.md#Contraindications"
+    ],
+    "must_contain": [
+      "peptic ulcer",
+      "aspirin",
+      "NSAIDs",
+      "third trimester"
     ],
     "expected_tool": null,
     "expected_args": null,
@@ -226,6 +270,11 @@
     "expected_sources": [
       "returns_and_expiry_policy.md#Expired-Medications"
     ],
+    "must_contain": [
+      "30 days",
+      "quarantine bin",
+      "batch number"
+    ],
     "expected_tool": "get_expiring_batches",
     "expected_args": {
       "branch_id": 1,
@@ -244,6 +293,15 @@
       "storage_sop.md#Receiving-And-FEFO",
       "storage_sop.md#Temperature-Monitoring"
     ],
+    "must_contain": {
+      "storage_sop.md#Receiving-And-FEFO": [
+        "FEFO",
+        "15°C–25°C"
+      ],
+      "storage_sop.md#Temperature-Monitoring": [
+        "15°C–25°C"
+      ]
+    },
     "expected_tool": "get_restock",
     "expected_args": {
       "branch_id": 3
@@ -261,6 +319,10 @@
     "expected_route": "rag_then_refer",
     "expected_sources": [
       "ibuprofen_leaflet.md#Drug-Interactions"
+    ],
+    "must_contain": [
+      "blood pressure",
+      "antihypertensives"
     ],
     "expected_tool": null,
     "expected_args": null,
