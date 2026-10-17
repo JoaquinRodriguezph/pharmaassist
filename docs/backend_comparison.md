@@ -2,15 +2,14 @@
 
 One run per backend through `scripts/try_backend.py` (backend chosen by `LLM_BACKEND` via the factory). This is a smoke test, not a benchmark: one run each cannot show how reliable either backend is.
 
-Labels: **Measured** = printed by the script. **Derived** = calculated from measured values. **Observed** = something I saw, not a printed figure. **Judged** = correctness, judged by Claude from general knowledge of inventory terms; no pharmacy reference was checked.
+Labels: **Measured** = printed by the script. **Derived** = calculated from measured values. **Observed** = something I saw, not a printed figure. **Judged** = Judged against the tracker’s definition.   
 
 ## Setup (same for both)
 - Prompt: *"What does a pharmacy reorder level mean?"*
 - System prompt: *"You are a pharmacy operations assistant. Answer in one short sentence."*
 - Temperature 0.0, no output-token limit.
-- Ollama: `llama3.2:latest`, local. Gemini: `gemini-3.6-flash` (as printed by the script).
-- Ollama: one run. Gemini: two invocations. The first was interrupted with Ctrl+C before it printed anything, and I don't know whether it reached the API, so the Gemini quota used was 1 or 2 requests.
-
+- Ollama: `llama3.2:latest`, local. Gemini: `gemini-3.6-flash` 
+- Ollama: one run. Gemini: one run. 
 ## Results
 
 | | Ollama | Gemini |
@@ -40,3 +39,5 @@ Labels: **Measured** = printed by the script. **Derived** = calculated from meas
 ## What this run does and does not verify about the live Gemini API
 - **Accepted by the live API:** a `system_instruction`, `temperature=0.0` and a single user turn through the real SDK. The usage fields `prompt_token_count`, `candidates_token_count` and `thoughts_token_count` were all populated and mapped as expected.
 - **Not exercised:** the `"model"` role for assistant turns (this call had only one user message), and `max_output_tokens` (no limit was set). Both are still unconfirmed against the live API.
+
+Unverified as of now: the assistant role "model", max_output_tokens together with thinking tokens, and tool calling.    

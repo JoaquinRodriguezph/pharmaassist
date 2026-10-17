@@ -1,7 +1,6 @@
 """Pick an LLM backend from the LLM_BACKEND environment variable.
 
 Each backend is imported inside its own branch, so choosing `ollama` never
-imports google-genai and choosing `gemini` never imports the ollama package.
 """
 
 from __future__ import annotations
