@@ -323,3 +323,14 @@ def test_script_rejects_a_malformed_must_contain_with_exit_1(tmp_path):
 
     assert result.returncode == 1
     assert "ERROR" in result.stdout and "Q7" in result.stdout
+
+
+def test_check_sources_rejects_citing_readme_or_other_non_documents(tmp_path):
+    kb = make_kb(tmp_path)
+    (kb / "README.md").write_text("# R\n\n## Heading Rule\ntext\n", encoding="utf-8")
+    (kb / "_draft.md").write_text("# D\n\n## Draft Section\ntext\n", encoding="utf-8")
+
+    problems = check_sources(kb, ["README.md#Heading-Rule", "_draft.md#Draft-Section", "a.md#Customer-Returns"])
+
+    assert len(problems) == 2
+    assert all("not a knowledge-base document" in p for p in problems)
