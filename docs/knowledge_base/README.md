@@ -1,6 +1,6 @@
 # Knowledge base
 
-Four fictional documents used to test the PharmaAssist RAG pipeline. Each starts with the banner *"FICTIONAL document for software testing only. Not medical or pharmacy guidance."* This README is not a knowledge-base document: the chunker must **not** index it.
+Four fictional documents used to test the PharmaAssist RAG pipeline. Each starts with the banner *"FICTIONAL document for software testing only. Not medical or pharmacy guidance."* This README is not a knowledge-base document, and that is enforced in code, not by convention (see "Which files are documents" below).
 
 | File | Sections cited by `eval/test_set.json` |
 |---|---|
@@ -10,6 +10,12 @@ Four fictional documents used to test the PharmaAssist RAG pipeline. Each starts
 | `ibuprofen_leaflet.md` | Contraindications, Drug Interactions |
 
 Each file also has one uncited section ("Purpose And Scope" or "About This Medicine"), so the chunker and retriever meet sections that no question points at.
+
+## Which files are documents
+
+A knowledge-base document is a `*.md` file directly inside this folder whose name is not `README.md` (any capitalization) and does not start with `_` or `.`. The rule is `is_kb_document` in `app/rag/kb.py`, and both the chunker and the citation checker use it, so this README, drafts named `_something.md`, hidden files, non-Markdown files and sub-folders are never indexed or cited. To add a document, add a `.md` file here; to keep a draft out of the index, start its name with `_`.
+
+Text before the first `##` heading (the banner, the title and the document ID) is not indexed. Every fact must sit under a `##` heading.
 
 ## Heading rule
 
