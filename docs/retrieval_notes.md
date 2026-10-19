@@ -1,6 +1,6 @@
 # Retrieval notes
 
-Step 4, first look: which embedding model, how to install it, and what the first embeddings show. Labels: **Card** = stated on the model's Hugging Face card (as reproduced by mirrors; my tools could not open the official page, so confirm the starred items there). **Docs** = stated in the sentence-transformers documentation. **Measured** = printed by `scripts/try_embeddings.py`. **Derived** = calculated from other numbers. **Prediction** = written before running anything.
+Step 4, first look: which embedding model, how to install it, and what the first embeddings show. Labels: **Card** = stated on the model's Hugging Face card; items marked **pending** have not yet been read from the card in the local snapshot (the copy of the card in the Hugging Face cache on this machine). **Docs** = stated in the sentence-transformers documentation. **Measured** = printed by `scripts/try_embeddings.py`. **Derived** = calculated from other numbers. **Prediction** = written before running anything.
 
 ## Embedding model
 
@@ -11,12 +11,10 @@ Step 4, first look: which embedding model, how to install it, and what the first
 | Name | `sentence-transformers/all-MiniLM-L6-v2` | |
 | Embedding dimension | 384 | Card ("384 dimensional dense vector space"); **Measured**: the script printed 384. |
 | Maximum sequence length | 256 word pieces; longer input is truncated | Card ("By default, input text longer than 256 word pieces is truncated"); Docs (longer texts are truncated to the first `max_seq_length` tokens) |
-| License | Apache-2.0 * | Hugging Face metadata of models derived from it and mirrors that say they keep the upstream license. Confirm on the official card. |
+| License | Apache-2.0, **pending**: not yet read from the card in the local snapshot | Hugging Face metadata of models derived from it |
 | Size | 22.7 million parameters, stored as 32-bit floats; `model.safetensors` is 90.9 MB | Parameters from the Hugging Face metadata of derived models. **Measured**: the download log showed `model.safetensors` at 90.9 MB, which matches the Derived figure (22.7 million x 4 bytes = 90.8 MB). |
-| Prefixes ("query:" / "passage:") | None. The card's own example encodes plain sentences, and the card says nothing about prefixes. | Card |
+| Prefixes ("query:" / "passage:") | No mention of prefixes in the card; the card's own example encodes plain sentences. **Pending**: a search of the local snapshot for `prefix`, `query:` and `passage:` has not yet been recorded. | Card |
 | Training | Fine-tuned from `nreimers/MiniLM-L6-H384-uncased` on over 1 billion sentence pairs; intended as a sentence and short-paragraph encoder | Card |
-
-\* To confirm by opening https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2 : the license (top of the card). The size is now confirmed by the download.
 
 **A gotcha with the length limit, and a correction.** A discussion thread on the model's page reported that its tokenizer configuration had been changed to 512, while the 256 limit lives in `sentence_bert_config.json`, so plain `transformers` would truncate at 512 and give different embeddings. In the run below the tokenizer reported 256 as well (**Measured**: `tokenizer.model_max_length: 256`), so that configuration seems to have been reverted, and my earlier note that it said 512 is out of date. The advice stands: load the model through `sentence-transformers`, and read `max_seq_length` from the model rather than assuming.
 
@@ -24,7 +22,7 @@ Step 4, first look: which embedding model, how to install it, and what the first
 - It covers the Hugging Face requirement and needs no API key or quota.
 - It is small enough for CPU.
 - It is the model Chroma's chunking report used for its second set of results, so that report is a useful comparison.
-- It has no prefix convention, so there is one less thing to get wrong in a first run.
+- The card mentions no prefix convention, so there is one less thing to get wrong in a first run.
 - Our chunks are 132 to 756 characters, and the limit is measured in tokens, so I expect them to fit (checked by the script, see Token length).
 
 **Limits of the choice.** It is an old model (2021) and newer small models may retrieve better, especially on specialist text such as medicine; one third-party page claims a large gap on a domain benchmark, which I have not verified. Other small models (for example the E5 family) use "query:" and "passage:" prefixes, and some others use a query instruction; that is another variable to test later, not part of a first run. The script takes the model name as a parameter (`--model`), so swapping is cheap.
@@ -48,6 +46,8 @@ torch
 ```
 
 This is a large dependency (the same guide shows the CPU `torch` download at about 143 MiB), so the requirements files will be split at Docker time.
+
+**Versions: pending.** Not yet recorded; `py -m pip show sentence-transformers torch chromadb` gives them.
 
 **Result (Measured):** the packages installed and the script ran on Python 3.12.10 on Windows, so the Ollama fallback is not needed. The versions of `sentence-transformers` and `torch`, and which `torch` build was installed, were not recorded; `py -m pip show sentence-transformers torch` would fix that. The run printed three warnings, none an error: unauthenticated requests to the Hugging Face Hub (a `HF_TOKEN` is optional and gives higher rate limits; keep it out of the repository), a symlinks warning for the Hugging Face cache on Windows (harmless; `HF_HUB_DISABLE_SYMLINKS_WARNING=1` silences it), and a deprecation notice for `get_sentence_embedding_dimension`, which the script no longer calls.
 
@@ -160,7 +160,7 @@ The script counts tokens per chunk with the model's own tokenizer (special token
 
 - **[Observed] Answerable questions do score visibly higher than Q09 and Q22.** Their top-1 scores are 0.640 to 0.709 without the prefix (0.619 to 0.762 with it), against 0.388 (0.395) for Q09 and 0.208 (0.223) for Q22. The lowest answerable top-1 is 0.252 above the highest unanswerable one without the prefix, and 0.224 with it [Derived]. Q09 is the closest, which fits it being built to look like the returns policy.
 - **This is not a threshold.** It is three answerable and two unanswerable questions against 14 hand-written chunks. Scores in between exist (Q01's second chunk is 0.452, Q06's is 0.566), and paraphrases, typos and other phrasings of an unanswerable question could land anywhere. A threshold needs many more questions.
-- **[Observed] A high score does not mean the right section.** For Q08 the right chunk is third, behind two other ibuprofen sections with scores of 0.709 and 0.632. A top-3 retrieval still contains it; a top-1 retrieval would miss it. I do not know why. Two guesses, neither tested: the question's words ("ibuprofen", "product leaflet") match the general description better than the contraindication list, and embedding models often handle "should NOT take" poorly.
+- **[Observed] A high score does not mean the right section.** For Q08 the right chunk is third, behind two other ibuprofen sections with scores of 0.709 and 0.632. A top-3 retrieval still contains it; a top-1 retrieval would miss it. This is why top-3 or top-5 retrieval is safer than top-1, and why hit at k will be measured across all the questions, including reworded and misspelled variants, in Step 4c. I do not know why Q08 ranks where it does. Two guesses, neither tested: the question's words ("ibuprofen", "product leaflet") match the general description better than the contraindication list, and embedding models often handle "should NOT take" poorly.
 - **[Observed] The prefix shows no benefit in this sample.** It raised the scores of whole documents (all three ibuprofen sections went up by 0.053 to 0.068 [Derived]) but did not change any expected rank. Every question here named its document, so none could show the prefix helping to pick the right leaflet. Keep both versions for the larger test.
 - **[Observed]** The two typos ("amoxicilin", "paracetmol") still found the right chunk; that is two examples.
 - **Next, for Step 4:** measure hit at 1 and hit at 3 across all the RAG questions, with and without the prefix, and add a few paraphrased and misspelled versions of each question, before choosing a threshold or a prefix setting.
