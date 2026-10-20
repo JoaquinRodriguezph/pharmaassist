@@ -1,10 +1,11 @@
-"""PharmaAssist HTTP API.
+"""PharmaAssist HTTP API and chat page.
 
     py -m uvicorn app.api.main:app --port 8001
 
-Port 8001, because the tracker uses 8000. The agent is built once at startup (model client,
-embedder, tracker client, knowledge-base ids). Requests are served one at a time: a lock around
-the agent keeps a single local GPU model from being asked for several answers at once.
+Then open http://localhost:8001 for the chat page. Port 8001, because the tracker uses 8000.
+The agent is built once at startup (model client, embedder, tracker client, knowledge-base
+ids). Requests are served one at a time: a lock around the agent keeps a single local GPU
+model from being asked for several answers at once.
 
 Environment: LLM_BACKEND and the backend's variables (see app/llm), TRACKER_BASE_URL,
 RAG_DB_PATH (default chroma_db/noctx), OLLAMA_NUM_CTX (default 8192).
@@ -19,6 +20,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 
 from app.api.schemas import ChatRequest, ChatResponse, HealthResponse
 from app.llm.base import LLMConnectionError, LLMError, LLMModelNotFoundError, LLMRateLimitError
@@ -26,6 +28,7 @@ from app.llm.base import LLMConnectionError, LLMError, LLMModelNotFoundError, LL
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DB = REPO_ROOT / "chroma_db" / "noctx"
 KB_DIR = REPO_ROOT / "docs" / "knowledge_base"
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 def build_agent():
@@ -66,6 +69,10 @@ def create_app(agent_factory: Callable = build_agent) -> FastAPI:
         state.clear()
 
     app = FastAPI(title="PharmaAssist", version="0.1.0", lifespan=lifespan)
+
+    @app.get("/", include_in_schema=False)
+    def index() -> FileResponse:
+        return FileResponse(STATIC_DIR / "index.html", media_type="text/html")
 
     @app.get("/health", response_model=HealthResponse)
     def health() -> HealthResponse:

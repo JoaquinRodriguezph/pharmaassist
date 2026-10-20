@@ -16,8 +16,10 @@ Other safeguards in code:
 - Branches: the branch list is fetched once and put in the system prompt. An id given where a
   name is expected (or the reverse) is translated; unknown branches are refused before the
   tracker is called; results are labelled with the branch name.
-- Citations: one text-only repair turn when the documents were used but the answer has no
-  valid citation, or has an invalid one.
+- Citations: one text-only repair turn when the answer has no valid citation (or has an
+  invalid one) and it rests on the documents: the model searched them itself, or no tracker
+  data came back. An answer built on tracker data alone is not repaired, so document labels
+  are not pasted onto tracker rows.
 - Output: echoed "Source [..]" lines and tool-call JSON lines are removed. Tool definitions,
   prompt text, or made-up citations replace the answer; a medical or scope sentence the model
   added on its own is removed; only failed tracker calls -> the tracker error; an early
@@ -367,10 +369,16 @@ class Agent:
 
         sources = tuple(kb_ids)
         citations = parse_citations(text, sources, self._known_ids)
+        searched = any(r.name == SEARCH_TOOL_NAME and r.ok for r in records)
+        tracker_ok = any(r.name != SEARCH_TOOL_NAME and r.ok for r in records)
+        needs_repair = (
+            stopped == "answered" and self.citation_repair and bool(sources)
+            and not is_refusal(text) and not _is_exactly(text, SCOPE_REFUSAL)
+            and (not citations.valid or bool(citations.invalid))
+            and (searched or not tracker_ok)
+        )
         repair_attempted = repair_applied = False
-        if (stopped == "answered" and self.citation_repair and sources
-                and not is_refusal(text) and not _is_exactly(text, SCOPE_REFUSAL)
-                and (not citations.valid or citations.invalid)):
+        if needs_repair:
             repair_attempted = True
             session.add_user_message(CITATION_REPAIR.format(labels=" ".join(f"[{s}]" for s in sources)))
             repair = session.step(allow_tools=False)
