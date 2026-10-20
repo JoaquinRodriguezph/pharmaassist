@@ -2,7 +2,8 @@
 
 A session holds one conversation with tool declarations. `step()` asks the model for its next
 turn: either text (the final answer) or one or more tool calls. After running the calls,
-`add_tool_results` sends their outputs back, and `step()` is called again.
+`add_tool_results` sends their outputs back, and `step()` is called again. `add_user_message`
+adds a follow-up user message (used for the citation repair turn).
 
 Shapes confirmed by scripts/probe_tool_calling.py (ollama 0.6.3, google-genai 2.31.0):
 - Ollama returns message.tool_calls[i].function.name and .arguments (a dict). A tool result
@@ -58,6 +59,10 @@ class ToolSession(ABC):
     @abstractmethod
     def add_tool_results(self, results: list[tuple[ToolCall, str]]) -> None:
         """Send back the output text of each tool call from the last turn."""
+
+    @abstractmethod
+    def add_user_message(self, text: str) -> None:
+        """Add a follow-up user message before the next step."""
 
 
 def _arguments(raw: Any) -> dict:
@@ -129,6 +134,9 @@ class OllamaToolSession(ToolSession):
     def add_tool_results(self, results: list[tuple[ToolCall, str]]) -> None:
         for call, output in results:
             self._messages.append({"role": "tool", "content": output, "tool_name": call.name})
+
+    def add_user_message(self, text: str) -> None:
+        self._messages.append({"role": "user", "content": text})
 
 
 # ---------------------------------------------------------------------------
@@ -208,6 +216,9 @@ class GeminiToolSession(ToolSession):
             for call, output in results
         ]
         self._contents.append(types.Content(role="user", parts=parts))
+
+    def add_user_message(self, text: str) -> None:
+        self._contents.append(types.Content(role="user", parts=[types.Part.from_text(text=text)]))
 
 
 def start_tool_session(client, *, system: str | None, question: str, history: list[Message] | None = None,
