@@ -245,3 +245,6 @@ Six replies read in full from the log, against the test set's `pass_criteria`:
 - An answer-level `must_contain` check in `eval_answers.py`, using the strings already in the test set.
 - Adding mixed questions without the sentence (Q17, Q18) to the hand-reading list.
 - A label-format experiment for pattern 1, for example the id alone on its own line, or "cite this as [id]" at the end of each block.
+
+### 9
+Answerable, all must_contain present: N of 11

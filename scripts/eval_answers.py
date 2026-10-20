@@ -6,7 +6,8 @@ separate row. Run from the project root:
 
     py scripts/eval_answers.py [--db chroma_db/noctx] [--with-extra] [--log eval/runs/answers.jsonl]
 
-Prints one row per question and the totals that section 5b predicts. Every call is logged as
+Prints one row per question and the totals that section 5b predicts. Answerable questions are
+also checked against their `must_contain` strings from the test set. Every call is logged as
 one JSON line (question, system, prompt, reply, retrieved chunks, citations, flags, tokens),
 so a bad answer can be inspected. Temperature 0, k = 5. Gemini is never used.
 """
@@ -31,6 +32,7 @@ from app.llm.base import LLMError
 from app.rag.answer import answer
 from app.rag.config import ENV_NAME, rag_with_context
 from app.rag.evalsets import load_independent, original_questions, split_answerable
+from app.rag.must_contain import check_must_contain
 
 EXTRA_IDS = ("Q09", "Q10")
 
@@ -65,6 +67,7 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     test_set = json.loads(args.test_set.read_text(encoding="utf-8"))
+    must_by_id = {q["id"]: q.get("must_contain") or [] for q in test_set}
     originals = original_questions(test_set)
     answerable, score_only = split_answerable(originals)
     _, independent = split_answerable(load_independent(args.independent))
@@ -92,7 +95,7 @@ def main(argv=None) -> int:
           f"k={args.k}; temperature 0; log {log_path}\n")
 
     header = (f"{'id':<6}{'group':<12}{'route':<17}{'refusal':>8}{'notcov':>7}{'uncited':>8}{'valid':>6}"
-              f"{'exp/rel cited':>14}{'rel in top5':>12}{'invalid':>8}{'p_tok':>7}{'c_tok':>6}{'sec':>6}")
+              f"{'exp/rel cited':>14}{'rel in top5':>12}{'invalid':>8}{'must':>6}{'p_tok':>7}{'c_tok':>6}{'sec':>6}")
     print(header)
     rows = []
     with open(log_path, "w", encoding="utf-8") as log:
@@ -103,9 +106,14 @@ def main(argv=None) -> int:
                 print(f"ERROR on {q.id}: {error}")
                 return 1
             row = record(q, group, result)
+            must_ok = None
             if group == "answerable":
                 row["expected_cited"] = any(e in result.valid_citations for e in q.expected)
                 row["all_expected_cited"] = all(e in result.valid_citations for e in q.expected)
+                mc = check_must_contain(result.text, must_by_id.get(q.id, []))
+                row["must_contain_missing"] = list(mc.missing)
+                row["must_contain_pass"] = mc.passed
+                must_ok = mc.passed
                 cited, in_top = row["expected_cited"], None
             elif q.related:
                 row["related_cited"] = any(r in result.valid_citations for r in q.related)
@@ -117,8 +125,8 @@ def main(argv=None) -> int:
             rows.append(row)
             print(f"{q.id:<6}{group:<12}{(q.route or '-'):<17}{yn(result.refusal):>8}{yn(result.says_not_covered):>7}"
                   f"{yn(result.uncited_answer):>8}{len(result.valid_citations):>6}{yn(cited):>14}{yn(in_top):>12}"
-                  f"{len(result.invalid_citations):>8}{str(result.prompt_tokens):>7}{str(result.completion_tokens):>6}"
-                  f"{(result.latency_seconds or 0):>6.1f}")
+                  f"{len(result.invalid_citations):>8}{yn(must_ok):>6}{str(result.prompt_tokens):>7}"
+                  f"{str(result.completion_tokens):>6}{(result.latency_seconds or 0):>6.1f}")
 
     ans = [r for r in rows if r["group"] == "answerable"]
     ind = [r for r in rows if r["group"] == "independent"]
@@ -127,6 +135,7 @@ def main(argv=None) -> int:
     counts = [
         ("answerable: at least one valid citation", sum(bool(r["valid_citations"]) for r in ans), len(ans)),
         ("answerable: cited an expected section", sum(r["expected_cited"] for r in ans), len(ans)),
+        ("answerable: all must_contain strings present", sum(r["must_contain_pass"] for r in ans), len(ans)),
         ("Q18: cited both expected sections", sum(r["all_expected_cited"] for r in ans if r["id"] == "Q18"), 1),
         ("answerable: pure refusal", sum(r["refusal"] for r in ans), len(ans)),
         ("all 17: at least one invalid citation", sum(bool(r["invalid_citations"]) for r in main_rows), len(main_rows)),
@@ -137,7 +146,7 @@ def main(argv=None) -> int:
         ("all 17: near_context_limit", sum(bool(r["near_context_limit"]) for r in main_rows), len(main_rows)),
         ("all 17: uncited_answer (not predicted)", sum(r["uncited_answer"] for r in main_rows), len(main_rows)),
     ]
-    print("\nTOTALS (compare with docs/answer_notes.md 5b)")
+    print("\nTOTALS (compare with docs/answer_notes.md 5b and 9)")
     for label, value, n in counts:
         print(f"  {label:<48}{value:>3} of {n}")
     tokens = [r["prompt_tokens"] for r in main_rows if r["prompt_tokens"] is not None]
@@ -145,13 +154,10 @@ def main(argv=None) -> int:
     extra = [r for r in rows if r["group"] == "extra"]
     if extra:
         print(f"  {'extra (Q09, Q10): pure refusal':<48}{sum(r['refusal'] for r in extra):>3} of {len(extra)}")
+    for r in ans:
+        if r["must_contain_missing"]:
+            print(f"  {r['id']} missing: {r['must_contain_missing']}")
 
     to_read = [r["id"] for r in ind if not r["says_not_covered"]]
-    to_read += [r["id"] for r in main_rows if r["uncited_answer"] and r["id"] not in to_read]
-    to_read += [r["id"] for r in main_rows if r["invalid_citations"] and r["id"] not in to_read]
-    print(f"\nread by hand (independent without the sentence, uncited, or with invalid citations): {to_read or 'none'}")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+    to_read += [r["id"] for r in ans if r["route"] == "both" and not r["says_not_covered"] and r["id"] not in to_read]
+    to_read += [r["id"] for r in main_rows if r["uncited_answer"] and r["id"] not in
