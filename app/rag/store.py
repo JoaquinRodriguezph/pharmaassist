@@ -86,14 +86,17 @@ def _client(db_path: Path):
 def _existing_collection(client):
     """The collection, or None if it does not exist.
 
-    Chroma raises different exception classes across versions for a missing
-    collection, so any lookup failure counts as "not found" here; a real problem
-    surfaces on the next call.
+    Asks `list_collections()` whether the name is there, instead of treating any
+    error from `get_collection` as "not found". Only a name that is not listed
+    counts as missing; any exception (a corrupt database, say) propagates, so it
+    cannot be mistaken for an empty store. `list_collections()` returns
+    Collection objects in Chroma 1.x and names in 0.6.x (Chroma's migration
+    guide), so each entry's name is read with getattr.
     """
-    try:
-        return client.get_collection(COLLECTION_NAME, embedding_function=None)
-    except Exception:
+    names = {getattr(entry, "name", entry) for entry in client.list_collections()}
+    if COLLECTION_NAME not in names:
         return None
+    return client.get_collection(COLLECTION_NAME, embedding_function=None)
 
 
 def _collection_metadata(embedder: Embedder, with_context: bool) -> dict:

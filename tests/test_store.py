@@ -2,16 +2,19 @@
 
 import hashlib
 import re
+from types import SimpleNamespace
 
 import chromadb
 import pytest
 
 from app.rag.similarity import cosine_similarity
+from app.rag import store as store_module
 from app.rag.store import (
     COLLECTION_NAME,
     EmbedderMismatchError,
     IngestCounts,
     StoreNotFoundError,
+    _existing_collection,
     ingest_kb,
     retrieve,
     store_info,
@@ -295,3 +298,76 @@ def test_an_embedder_that_returns_the_wrong_length_is_rejected(setup):
 
     with pytest.raises(ValueError, match="length 10"):
         ingest_kb(kb, db, WrongLength())
+
+
+# ---------------------------------------------------------------------------
+# Only a missing collection counts as "not found"
+# ---------------------------------------------------------------------------
+
+class FakeChromaClient:
+    """Stands in for the Chroma client to make list_collections / get_collection fail on demand."""
+
+    def __init__(self, listed=(), list_error=None, get_error=None):
+        self.listed, self.list_error, self.get_error = list(listed), list_error, get_error
+        self.created = False
+        self.get_calls = 0
+
+    def list_collections(self):
+        if self.list_error:
+            raise self.list_error
+        return self.listed
+
+    def get_collection(self, name, embedding_function=None):
+        self.get_calls += 1
+        if self.get_error:
+            raise self.get_error
+        return f"collection:{name}"
+
+    def create_collection(self, **kwargs):
+        self.created = True
+        raise AssertionError("must not create a collection when looking one up failed")
+
+
+def test_a_name_that_is_not_listed_means_no_collection_and_get_is_not_called():
+    client = FakeChromaClient(listed=[SimpleNamespace(name="some_other_collection")])
+
+    assert _existing_collection(client) is None
+    assert client.get_calls == 0
+
+
+@pytest.mark.parametrize(
+    "listed",
+    [
+        pytest.param([SimpleNamespace(name=COLLECTION_NAME)], id="collection-objects-as-in-chroma-1.x"),
+        pytest.param([COLLECTION_NAME], id="names-as-in-chroma-0.6"),
+    ],
+)
+def test_a_listed_collection_is_fetched_whether_listing_gives_objects_or_names(listed):
+    assert _existing_collection(FakeChromaClient(listed=listed)) == f"collection:{COLLECTION_NAME}"
+
+
+def test_an_error_while_listing_is_not_mistaken_for_an_empty_store():
+    client = FakeChromaClient(list_error=RuntimeError("database disk image is malformed"))
+
+    with pytest.raises(RuntimeError, match="malformed"):
+        _existing_collection(client)
+
+
+def test_an_error_while_fetching_a_listed_collection_is_not_mistaken_for_a_missing_one():
+    client = FakeChromaClient(listed=[COLLECTION_NAME], get_error=RuntimeError("segment is corrupt"))
+
+    with pytest.raises(RuntimeError, match="corrupt"):
+        _existing_collection(client)
+
+
+def test_ingest_and_retrieve_stop_on_a_corrupt_store_instead_of_creating_a_new_one(setup, monkeypatch):
+    kb, db, embedder = setup
+    ingest_kb(kb, db, embedder)
+    broken = FakeChromaClient(listed=[COLLECTION_NAME], get_error=RuntimeError("segment is corrupt"))
+    monkeypatch.setattr(store_module, "_client", lambda path: broken)
+
+    with pytest.raises(RuntimeError, match="corrupt"):
+        ingest_kb(kb, db, embedder)
+    with pytest.raises(RuntimeError, match="corrupt"):
+        retrieve(db, embedder, "bananas")
+    assert broken.created is False
