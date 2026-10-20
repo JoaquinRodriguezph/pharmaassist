@@ -151,3 +151,97 @@ Sections 1 to 5 were written before any code and are left as they were. These po
 - **A chunk id without `::n` stops `answer()`.** `group_sources` raises `ValueError` ("chunk id ... does not end in '::<part number>'"). The store always writes the suffix, so this cannot happen today, and the message says what is wrong.
 - **A URL containing brackets would be parsed.** The parser reads only square brackets, so in `[text](url)` the URL part is ignored, unless the URL itself contains `[` or `]`. That is an edge case, and I did not add code for it.
 - **`test_every_real_section_id_has_the_section_id_shape` asserts exactly 13 sections.** It will fail for a non-bug reason when a section is added. I kept it because it also catches a section lost by accident; update the number with the knowledge base.
+
+## 7. Run plan and the last predictions (written before the first live run)
+
+**Hand check of the prompt** (`answer()` with a fake client, Q05, chunks taken from the real knowledge base): the prompt reads as intended.
+
+- Customer-Returns parts 1 and 2 are merged in part order, and placed at the rank of the section's best chunk.
+- Each block starts with its exact citation string, no scores appear, and the question comes last.
+- One thing to watch: the sources contain numbered lists ("1. Staff must..."), like the numbered rules in the system prompt. I am not changing anything before the run.
+
+**Order of the live runs.** All on Ollama `llama3.2`, temperature 0, using the store built without the prefix (`chroma_db/noctx`):
+
+1. `scripts/try_answer.py --dry-run --id Q05`: the real retrieved prompt, with no LLM call.
+2. `scripts/try_answer.py --insurance`: conditions A, B and C, two runs each. C is judged only by the three mechanical checks in 5a.
+3. `scripts/try_answer.py --id Q05`. **Pass, mechanical:**
+   - `storage_sop.md#Temperature-Monitoring` is in `valid_citations`;
+   - `refusal` is False;
+   - `says_not_covered` is False.
+
+   **Prediction:** pass.
+4. `scripts/eval_answers.py --with-extra`: the batch. **Predictions:** the 5b table, unchanged, with Q09 and Q10 as a separate row. Every call is logged to `eval/runs/answers-<time>.jsonl` with its system prompt, prompt and reply.
+
+**One more prediction, for the field added in section 6:** `uncited_answer` on 0 to 2 of the 17.
+
+**What I will not do after seeing the results:** change the system prompt, k or the checks and then report the new numbers as if they were these. A change gets its own predictions and its own run.
+
+## 8. Results of the first live run (20 October 2026)
+
+`py -m pytest`: 473 passed in 19.80 s [Measured]. Model `llama3.2:latest` on Ollama, temperature 0, store `chroma_db/noctx` (14 chunks, no prefix). Log: `eval/runs/answers-20261020-165450.jsonl`. These are the predictions from sections 5 and 7, against the result. Nothing was changed between writing them and running.
+
+### 8a. The "insurance plan" question [Measured]
+
+| Condition | Result, both runs identical | Prediction |
+|---|---|---|
+| A. Plain | Repeats "set by the pharmacy or the patient's insurance plan" (68 completion tokens) | **Met** |
+| B. Rules only, no sources | A definition from memory, without "insurance", followed by the fixed sentence in square brackets: `refusal` False, `says_not_covered` True | **Not met** (predicted `refusal` True) |
+| C. RAG | `The provided sources do not answer this question.` Mechanical check PASS on both runs: `refusal` True, no "insurance", no valid citations | **Met** |
+| C retrieval | Top 1 is `returns_and_expiry_policy.md#Purpose-And-Scope`, as predicted, but with a score of 0.574, not below 0.5 | **Half met**: the section was right, the score was not |
+| C prompt tokens | 841 | **Met** (under 1,500) |
+
+**What B shows.** The system prompt alone did not stop the model answering from memory: with no sources, it gave a definition anyway and then added the sentence. With sources, it gave only the sentence. In this one prompt, the "insurance" claim disappeared in both B and C, so its disappearance cannot be credited to the sources alone. What the sources changed is that the model stopped answering at all. One prompt, two identical runs at temperature 0: a demonstration, not a rate.
+
+**A side note on the score.** 0.574 for a question the knowledge base cannot answer is one more case against a score threshold (Q20 was 0.590).
+
+### 8b. Q05 [Measured]
+
+Cited `storage_sop.md#Temperature-Monitoring` for both facts (8:00 AM and 4:00 PM, 15°C–25°C), no refusal, 1,049 prompt tokens. Mechanical check PASS. **Prediction met.**
+
+### 8c. The batch, 17 questions [Measured]
+
+| Metric | Result | Prediction | |
+|---|---|---|---|
+| Answerable: at least one valid citation | 8 of 11 | 9 or more | **Not met** |
+| Answerable: cited an expected section | 8 of 11 | 8 to 10 | Met, at the low edge |
+| Q18: cited both expected sections | 0 of 1 | about even | (not a scored prediction) |
+| Answerable: pure refusal | 0 of 11 | 1 or fewer | Met |
+| All 17: at least one invalid citation | 2 (Q02, Q03) | 1 to 3 | Met |
+| Independent: `says_not_covered` | 5 of 6 | 4 to 6 | Met |
+| Independent: pure refusal | 4 of 6 | 1 to 3 | **Not met**: more pure refusals than predicted |
+| `rag_unanswerable`: cited the related section | 2 of 5 (IND01, IND08) | 2 to 4 | Met, at the low edge |
+| `rag_unanswerable`: related section in the top 5 | 5 of 5 | (my caveat: the drug-name pattern might keep it out) | The caveat was wrong: retrieval found the related section every time, so the 3 misses are generation, not retrieval |
+| All 17: `near_context_limit` | 0 | 0 | Met |
+| All 17: largest `prompt_tokens` | 1,049 | under 1,500 | Met |
+| All 17: `uncited_answer` | 1 (Q04) | 0 to 2 | Met |
+| Extra: Q09, Q10 pure refusal | 2 of 2 | both | Met |
+
+- **Retrieval was not the problem.** The 3 answerable questions with no valid citation (Q02, Q03, Q04) and the 3 `rag_unanswerable` questions that did not cite their related section (IND02, IND06, IND07, all pure refusals) all had the needed section in the top 5.
+- **Exactly the cases the labels want:** IND08 (the related rule, the sentence, and a citation). IND01 cited the related section but did not say the live state can't be seen, so it may state a live fact.
+- **Read by hand next:** Q02 and Q03 (what the invalid citations were), Q04 (an answer with no citation), and IND01 (whether it claims to know today's log). Also Q17 and Q18: both need a tool for half the question, but neither said anything was not covered. They may have invented batches or a restock list. The script's hand-reading list did not include them; that is a gap in the script, noted here and not fixed before reporting these numbers.
+
+### 8d. Read by hand [Observed]
+
+Six replies read in full from the log, against the test set's `pass_criteria`:
+
+| Id | What it did | Against the test set |
+|---|---|---|
+| Q02 | States the 90-day pull and the quarantine bin, but **merges two rules**: it sends 90-day items to the quarantine bin, which the policy reserves for items within 30 days of expiry or expired. Omits "30 days" and "batch number". Two citations are **invented section ids** built from the text (`storage_sop.md#Shelve-Stock-Using-FEFO`, `returns_and_expiry_policy.md#Items-Within-90-Days`), written as markdown links | Fails: no valid citation, misses 2 of 4 required strings, one wrong fact |
+| Q03 | All facts correct (unopened, intact seal, receipt, 7 calendar days, so eligible at 5 days). One **invented** id: `returns_and_expiry_policy.md#Unopened-OTC-Items`, a phrase from a list item | Facts pass; the citation fails |
+| Q04 | Copies the three excursion steps word for word from the right section. **No citation at all.** Omits the 2°C–8°C range. Adds a remark that "the SOP does not specify what action to take immediately", which is doubtful, since the three steps are the immediate actions | Fails: no citation, misses "2°C–8°C" |
+| Q17 | States the 30-day rule (batch number, quarantine bin) correctly with a valid citation. **Ignores the batch-list half of the question** without saying it can't answer it. Invents no batches | Document half passes; the tool half is out of scope here; rule 4 not followed |
+| Q18 | All facts are in `Receiving-And-FEFO` (inspection, FEFO shelving, 15°C–25°C), cited every time. Refers to "the first item returned on the restock list" without naming it or saying it doesn't have the list. Invents no product | Document half passes (FEFO and 15°C–25°C, cited); rule 4 not followed |
+| IND01 | Cites `Temperature-Monitoring` (the same id twice, placed before the text) and states the 8:00 AM and 4:00 PM readings. **Does not claim to know today's log**, and does not say it can't see it either. Omits the 15°C–25°C range | Safe, but less than its `expected_behavior` |
+
+**Patterns** (six replies, so these are observations, not rates):
+
+1. **Invented section ids instead of copying the label** (Q02, Q03): 3 ids in 2 answers, each built from words in the source text. The parser caught all 3 as `not in the knowledge base`, which is what the check is for. **Hypothesis, untested:** the model does not take `Source [id] (Heading)` as the string to copy; the numbered list items inside the sources may look like section names to it.
+2. **Rule 4 is not followed on mixed questions.** Q17, Q18 and IND01 drop the part they cannot answer without saying so. Only IND08 used the sentence for the uncoverable part. This is why `says_not_covered` looks good on the independent set (pure refusals) and is absent on the answerable mixed questions.
+3. **No invented data was seen.** No batches, products or log readings were made up in these six. That is the failure I most wanted to rule out, and in this sample it did not happen.
+4. **One factual slip with the right section in front of it** (Q02: 90-day items to the quarantine bin). A valid-citation check cannot catch this; the `must_contain` strings would have flagged the omissions in Q02 and Q04, though not the merged rule itself.
+
+**Not done yet, each would need its own predictions and its own run:**
+
+- An answer-level `must_contain` check in `eval_answers.py`, using the strings already in the test set.
+- Adding mixed questions without the sentence (Q17, Q18) to the hand-reading list.
+- A label-format experiment for pattern 1, for example the id alone on its own line, or "cite this as [id]" at the end of each block.
