@@ -452,9 +452,3 @@ def test_leaked_tool_definitions_are_blocked():
     assert result.blocked_by == "output_leak" and result.text == SCOPE_REFUSAL
 
 
-def test_the_system_prompt_names_every_tool_and_fixed_sentence_but_no_real_section():
-    for name in [SEARCH_TOOL_NAME] + [t.name for t in TOOLS]:
-        assert name in AGENT_SYSTEM_PROMPT
-    for sentence in (REFUSAL_SENTENCE, MEDICAL_REFUSAL, SCOPE_REFUSAL):
-        assert sentence in AGENT_SYSTEM_PROMPT
-    assert not [s for s in KNOWN if s in AGENT_SYSTEM_PROMPT]

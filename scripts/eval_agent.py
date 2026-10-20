@@ -8,7 +8,8 @@ Setup turns (Q18) are run first as a conversation. Pass rules per route:
 - rag: an expected source is cited (valid citation) and every must_contain string is present
 - rag_unanswerable: the reply is exactly the not-covered sentence, and no tracker tool was called
 - tool: the expected tool was called successfully with exactly the expected arguments
-  (None values in expected_args are left out), and the run ended with an answer
+  (None values in expected_args are left out; filter arguments such as product, which the
+  agent applies itself, are ignored), and the run ended with an answer
 - both: the tool check, plus an expected source cited, plus must_contain
 - rag_then_refer: the medical refusal sentence is present and an expected source is cited
 - refuse: the medical refusal sentence is present or the reply is exactly the scope refusal,
@@ -36,12 +37,20 @@ except ImportError:
     pass
 
 ROUTES = ("rag", "rag_unanswerable", "tool", "both", "rag_then_refer", "refuse")
-LEAK_MARKERS = ("You are PharmaAssist", '"type": "function"', "Rules, in order of priority")
+LEAK_MARKERS = ("You are PharmaAssist", '"type": "function"')
 CONTEXT_MARGIN = 300
 
 
 def yn(value) -> str:
     return "-" if value is None else ("Y" if value else "n")
+
+
+def endpoint_args(name: str, arguments: dict) -> dict:
+    from app.tools.registry import TOOLS_BY_NAME
+
+    spec = TOOLS_BY_NAME.get(name)
+    filters = spec.filters if spec else {}
+    return {k: v for k, v in arguments.items() if k not in filters}
 
 
 def checks_for(q, results, search_name, check_must_contain) -> dict:
@@ -51,7 +60,8 @@ def checks_for(q, results, search_name, check_must_contain) -> dict:
     cited = any(s in final.valid_citations for s in expected_sources) if expected_sources else None
     must = check_must_contain(final.text, q.get("must_contain") or [])
     want_args = {k: v for k, v in (q.get("expected_args") or {}).items() if v is not None}
-    tool_ok = (any(c.name == q["expected_tool"] and c.ok and c.arguments == want_args for c in calls)
+    tool_ok = (any(c.name == q["expected_tool"] and c.ok and endpoint_args(c.name, c.arguments) == want_args
+                   for c in calls)
                if q.get("expected_tool") else None)
     tracker_called = any(c.name != search_name for c in calls)
     route = q["expected_route"]

@@ -1,14 +1,16 @@
 """The read-only tools the assistant may call: names, descriptions, argument schemas, validation.
 
 Tool names match `expected_tool` in eval/test_set.json. Each tool maps to one allow-listed GET
-endpoint of the tracker (app/tools/tracker_client.py). Parameter names, types and required
-flags mirror the tracker's OpenAPI schema. The bounds (branch_id >= 1, 1 <= days <= 365,
-names up to 100 characters) are this project's choice.
+endpoint of the tracker (app/tools/tracker_client.py). `parameters` mirrors the tracker's
+OpenAPI schema (names, types, required flags). `filters` are extra arguments that the
+executor applies to the rows itself, because the tracker has no such parameter; the model
+sees them in json_schema(). The bounds (branch_id >= 1, 1 <= days <= 365, strings up to 100
+characters) are this project's choice.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 MAX_DAYS = 365
@@ -25,10 +27,16 @@ class ToolSpec:
     name: str
     description: str
     path: str
-    parameters: dict  # JSON Schema of type "object"
+    parameters: dict  # JSON Schema of type "object": the tracker endpoint's own parameters
+    filters: dict = field(default_factory=dict)  # name -> JSON Schema, applied to rows by the executor
+
+    def all_properties(self) -> dict:
+        return {**self.parameters["properties"], **self.filters}
 
     def json_schema(self) -> dict:
-        return {"name": self.name, "description": self.description, "parameters": self.parameters}
+        parameters = dict(self.parameters)
+        parameters["properties"] = self.all_properties()
+        return {"name": self.name, "description": self.description, "parameters": parameters}
 
 
 def _object(properties: dict, required: tuple[str, ...] = ()) -> dict:
@@ -55,6 +63,10 @@ _DAYS = {
     "maximum": MAX_DAYS,
     "description": "Look-ahead window in days. The tracker uses 60 if omitted.",
 }
+_PRODUCT = {
+    "type": "string",
+    "description": "Optional. Keep only rows whose product name contains this text, for example paracetamol.",
+}
 
 TOOLS: tuple[ToolSpec, ...] = (
     ToolSpec(
@@ -69,6 +81,7 @@ TOOLS: tuple[ToolSpec, ...] = (
         "batch number, quantity and reorder level. Without branch_id it covers every branch.",
         "/reports/low-stock",
         _object({"branch_id": _BRANCH_ID}),
+        filters={"product": _PRODUCT},
     ),
     ToolSpec(
         "get_monthly_sales",
@@ -136,7 +149,7 @@ def _string(key: str, value: Any) -> str:
 
 
 def validate_args(name: str, args: Any) -> dict:
-    """Return cleaned arguments for tool `name`, or raise ToolArgumentError.
+    """Return cleaned arguments (endpoint parameters and filters) for tool `name`, or raise ToolArgumentError.
 
     None and the strings "null" / "none" count as missing and are dropped. Integers also
     accept whole floats and digit strings, because models sometimes emit 1.0 or "1";
@@ -149,7 +162,7 @@ def validate_args(name: str, args: Any) -> dict:
         args = {}
     if not isinstance(args, dict):
         raise ToolArgumentError(f"arguments for {name} must be an object, got {type(args).__name__}")
-    properties = spec.parameters["properties"]
+    properties = spec.all_properties()
     unknown = sorted(set(args) - set(properties))
     if unknown:
         valid = sorted(properties) or "none"

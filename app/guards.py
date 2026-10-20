@@ -1,9 +1,10 @@
 """Deterministic checks around the model.
 
 check_input runs before any model call and catches prompt injection, requests to reveal the
-instructions, and requests to change data. is_personal_medical flags questions about a
-specific person's dose, symptoms or medicines. leaks_internals runs on the final answer.
-Patterns are kept narrow; tests check them against every test-set question.
+instructions, requests to change data, and clearly off-topic work (writing code, scraping,
+hacking). is_personal_medical flags questions about a specific person's dose, symptoms or
+medicines. leaks_internals runs on the final answer. Patterns are kept narrow; tests check
+them against every test-set question.
 """
 
 from __future__ import annotations
@@ -25,6 +26,10 @@ _INPUT_PATTERNS: tuple[tuple[str, re.Pattern], ...] = tuple(
         ("schema_change", r"\b(drop|truncate|alter)\b.{0,30}\b(table|database|schema)\b"),
         ("bulk_delete", r"\bdelete\s+(all|every|the)\b.{0,30}\b(rows|records|batches|stock|table|data)\b"),
         ("data_change", r"\b(set|change|update|make)\b.{0,60}\b(quantit(y|ies)|stock|prices?)\b.{0,20}\bto\s+\d"),
+        ("write_code",
+         r"\b(write|create|build|generate|make|code)\b.{0,40}\b(script|program|scraper|bot|macro|sql\s+query|regex|website)\b"),
+        ("scraping", r"\bscrap(e|es|ed|ing|er|ers)\b"),
+        ("hacking", r"\b(hack|exploit|crack)\b"),
     )
 )
 
@@ -38,11 +43,11 @@ _MEDICAL_PATTERNS: tuple[re.Pattern, ...] = tuple(
     )
 )
 
-_LEAK_MARKERS = ('"type": "function"', "Rules, in order of priority", "You are PharmaAssist")
+_LEAK_MARKERS = ('"type": "function"', "You are PharmaAssist")
 
 
 def check_input(text: str) -> str | None:
-    """The name of the first injection or write pattern the text matches, or None."""
+    """The name of the first injection, write or off-topic pattern the text matches, or None."""
     for name, pattern in _INPUT_PATTERNS:
         if pattern.search(text):
             return name
@@ -54,8 +59,9 @@ def is_personal_medical(text: str) -> bool:
     return any(pattern.search(text) for pattern in _MEDICAL_PATTERNS)
 
 
-def leaks_internals(text: str, tool_descriptions: list[str]) -> bool:
-    """True if the answer contains system-prompt markers or a tool description."""
+def leaks_internals(text: str, fragments: list[str]) -> bool:
+    """True if the answer contains a leak marker or any of the given fragments
+    (tool descriptions, sentences of the system prompt)."""
     if any(marker in text for marker in _LEAK_MARKERS):
         return True
-    return any(description[:80] in text for description in tool_descriptions if description)
+    return any(fragment[:80] in text for fragment in fragments if fragment)

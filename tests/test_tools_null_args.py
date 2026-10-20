@@ -16,7 +16,8 @@ def test_a_null_string_for_a_required_argument_is_missing():
 
 
 def test_an_unknown_argument_error_lists_the_valid_arguments():
-    with pytest.raises(ToolArgumentError, match=r"does not take \['query'\]; its arguments are \['branch_id'\]"):
+    with pytest.raises(ToolArgumentError,
+                       match=r"does not take \['query'\]; its arguments are \['branch_id', 'product'\]"):
         validate_args("get_low_stock", {"query": "paracetamol", "branch_id": "null"})
 
 
