@@ -19,10 +19,13 @@ COPY app ./app
 COPY scripts/ingest_kb.py ./scripts/ingest_kb.py
 COPY docs/knowledge_base ./docs/knowledge_base
 
-# Download the embedding model and build the Chroma store at build time,
-# so the container needs no network access to Hugging Face at runtime.
+# Download the embedding model and build the Chroma store at build time.
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')" \
  && python scripts/ingest_kb.py --db chroma_db/noctx --no-context
+
+# From here on, never contact the Hugging Face Hub: the model is already in the image.
+ENV HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1
 
 RUN useradd --create-home --uid 10001 appuser && chown -R appuser /app
 USER appuser
