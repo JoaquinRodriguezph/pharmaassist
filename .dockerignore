@@ -1,0 +1,14 @@
+.git
+.venv
+.vscode
+.env
+.env.*
+**/__pycache__
+**/*.pyc
+.pytest_cache
+chroma_db
+eval
+tests
+*.md
+!docs/knowledge_base/*.md
+requirements.txt

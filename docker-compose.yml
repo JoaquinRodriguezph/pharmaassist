@@ -1,0 +1,20 @@
+# Runs the PharmaAssist API in a container. Ollama and the tracker stay on the host machine.
+#   docker compose up --build
+# Then open http://localhost:8001
+services:
+  pharmaassist:
+    build: .
+    image: pharmaassist:latest
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env            # read at runtime (e.g. GEMINI_API_KEY); never copied into the image
+    environment:
+      LLM_BACKEND: ollama
+      OLLAMA_MODEL: llama3.2:latest
+      OLLAMA_HOST: http://host.docker.internal:11434
+      OLLAMA_NUM_CTX: "8192"
+      TRACKER_BASE_URL: http://host.docker.internal:8000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
