@@ -8,8 +8,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# CPU-only PyTorch first, so sentence-transformers does not pull the CUDA build.
-RUN pip install torch --index-url https://download.pytorch.org/whl/cpu
+# CPU-only PyTorch, the same version as the development venv (2.14.1+cpu),
+# installed first so sentence-transformers does not pull the CUDA build.
+RUN pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu
 
 COPY requirements-runtime.txt .
 RUN pip install -r requirements-runtime.txt
