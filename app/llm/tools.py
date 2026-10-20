@@ -3,7 +3,8 @@
 A session holds one conversation with tool declarations. `step()` asks the model for its next
 turn: either text (the final answer) or one or more tool calls. After running the calls,
 `add_tool_results` sends their outputs back, and `step()` is called again. `add_user_message`
-adds a follow-up user message (used for the citation repair turn).
+adds a follow-up user message, and `step(allow_tools=False)` asks for text only (used for
+the citation repair turn).
 
 Shapes confirmed by scripts/probe_tool_calling.py (ollama 0.6.3, google-genai 2.31.0):
 - Ollama returns message.tool_calls[i].function.name and .arguments (a dict). A tool result
@@ -53,8 +54,8 @@ class ToolTurn:
 
 class ToolSession(ABC):
     @abstractmethod
-    def step(self) -> ToolTurn:
-        """Ask the model for its next turn."""
+    def step(self, allow_tools: bool = True) -> ToolTurn:
+        """Ask the model for its next turn. With allow_tools=False it may only answer in text."""
 
     @abstractmethod
     def add_tool_results(self, results: list[tuple[ToolCall, str]]) -> None:
@@ -99,11 +100,12 @@ class OllamaToolSession(ToolSession):
         if max_tokens is not None:
             self._options["num_predict"] = max_tokens
 
-    def step(self) -> ToolTurn:
+    def step(self, allow_tools: bool = True) -> ToolTurn:
         start = time.perf_counter()
         try:
             response = self._client._client.chat(
-                model=self._client.model, messages=list(self._messages), tools=self._tools, options=self._options
+                model=self._client.model, messages=list(self._messages),
+                tools=self._tools if allow_tools else None, options=self._options,
             )
         except ConnectionError as exc:
             raise LLMConnectionError(
@@ -164,16 +166,22 @@ class GeminiToolSession(ToolSession):
         if max_tokens is not None:
             config["max_output_tokens"] = max_tokens
         self._config = types.GenerateContentConfig(**config)
+        self._text_only_config = self._config.model_copy(update={
+            "tool_config": types.ToolConfig(
+                function_calling_config=types.FunctionCallingConfig(mode=types.FunctionCallingConfigMode.NONE)
+            )
+        })
 
-    def step(self) -> ToolTurn:
+    def step(self, allow_tools: bool = True) -> ToolTurn:
         contents = list(self._contents)
+        config = self._config if allow_tools else self._text_only_config
         attempt_seconds = 0.0
 
         def attempt():
             nonlocal attempt_seconds
             start = self._client._clock()
             response = self._client._client.models.generate_content(
-                model=self._client.model, contents=contents, config=self._config
+                model=self._client.model, contents=contents, config=config
             )
             attempt_seconds = self._client._clock() - start
             return response

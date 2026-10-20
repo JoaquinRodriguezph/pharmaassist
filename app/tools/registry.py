@@ -13,6 +13,7 @@ from typing import Any
 
 MAX_DAYS = 365
 MAX_NAME_LENGTH = 100
+_NULL_STRINGS = {"null", "none"}
 
 
 class ToolArgumentError(ValueError):
@@ -99,6 +100,10 @@ TOOLS: tuple[ToolSpec, ...] = (
 TOOLS_BY_NAME: dict[str, ToolSpec] = {tool.name: tool for tool in TOOLS}
 
 
+def _is_null(value: Any) -> bool:
+    return value is None or (isinstance(value, str) and value.strip().casefold() in _NULL_STRINGS)
+
+
 def _integer(key: str, value: Any, schema: dict) -> int:
     if isinstance(value, bool):
         raise ToolArgumentError(f"{key} must be an integer, got {value!r}")
@@ -130,8 +135,9 @@ def _string(key: str, value: Any) -> str:
 def validate_args(name: str, args: Any) -> dict:
     """Return cleaned arguments for tool `name`, or raise ToolArgumentError.
 
-    None values are dropped. Integers also accept whole floats and digit strings, because
-    models sometimes emit 1.0 or "1"; booleans are refused.
+    None and the strings "null" / "none" count as missing and are dropped. Integers also
+    accept whole floats and digit strings, because models sometimes emit 1.0 or "1";
+    booleans are refused.
     """
     spec = TOOLS_BY_NAME.get(name)
     if spec is None:
@@ -143,7 +149,9 @@ def validate_args(name: str, args: Any) -> dict:
     properties = spec.parameters["properties"]
     unknown = sorted(set(args) - set(properties))
     if unknown:
-        raise ToolArgumentError(f"{name} does not take {unknown}")
+        valid = sorted(properties) or "none"
+        raise ToolArgumentError(f"{name} does not take {unknown}; its arguments are {valid}")
+    args = {key: (None if _is_null(value) else value) for key, value in args.items()}
     missing = [key for key in spec.parameters["required"] if args.get(key) is None]
     if missing:
         raise ToolArgumentError(f"{name} requires {missing}")
