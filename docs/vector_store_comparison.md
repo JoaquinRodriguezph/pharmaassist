@@ -1,6 +1,6 @@
 # Vector store comparison: Chroma and FAISS (Step 4d)
 
-Why I did this: I used Chroma for the pipeline and wanted to know what a plain FAISS index would change, on the same chunks and the same embedded text. Labels: **Docs** = stated on the page named in "Sources" (read on 20 October 2026). **Measured** = printed by a command run on this machine. **Prediction** = written before the run. **Untested** = a guess I have not run. **Pending** = a command exists for it, and I have not pasted its output yet.
+Why I did this: I used Chroma for the pipeline and wanted to know what a plain FAISS index would change, on the same chunks and the same embedded text. Labels: **Docs** = stated on the page named in "Sources" (read on 20 October 2026). **Measured** = printed by a command run on this machine. **Prediction** = written before the run. **Untested** = a guess I have not run. **Pending** = a command exists for it, and I have not pasted its output yet. The pre-registration section was written before the first run, but it was committed together with the results, so the commit order does not prove that.
 
 The code is `app/rag/faiss_index.py` (index, save, load), `app/rag/rank_compare.py` (the tie rule), `tests/test_faiss_index.py`, `tests/test_rank_compare.py` and `scripts/compare_faiss.py`. I installed FAISS with `pip install faiss-cpu`, version 1.15.1 [Measured].
 
@@ -14,18 +14,18 @@ The code is `app/rag/faiss_index.py` (index, save, load), `app/rag/rank_compare.
 | dtype and shape | Vectors are rows of a `float32` matrix: "The data type `dtype` must be `float32`", row-major, `nb`-by-`d` for the database and `nq`-by-`d` for queries | Getting started |
 | Cosine similarity | Inner product "is not by itself cosine similarity, unless the vectors are normalized". Normalize the database vectors before adding and the queries before searching, with `faiss.normalize_L2` in Python | MetricType and distances |
 | What `search` returns | `D, I = index.search(xq, k)`: two `nq`-by-`k` matrices, the scores and the integer ids (positions). For the L2 index on that page, rows are "sorted by increasing distance". The page I read for inner product says only that one searches for "a *larger* similarity", not how rows are ordered | Getting started; MetricType and distances |
-| Id when fewer than `k` results exist | "If there are not enough elements to fill the result list, the missing results are set to -1." That sentence is in the FAQ in the context of `IndexIVF` and `IndexHNSW`. **I found nothing about `IndexFlatIP`**, and nothing about what the score is for a missing result | FAQ |
+| Id when fewer than `k` results exist | "If there are not enough elements to fill the result list, the missing results are set to -1." That sentence is in the FAQ in the context of `IndexIVF` and `IndexHNSW`. The pages I read say nothing about `IndexFlatIP`; my measurement below shows it does the same, with the most negative float32 as the score | FAQ; Measured below |
 | Ids on a flat index | Flat indexes "do not store vector ids, since in many cases sequential numbering is enough". No `add_with_id` (wrap in `IndexIDMap`). Removal with `remove` "shrinks the index and changes the numbering" | Faiss indexes |
 | Save and load | `write_index(index, "large.index")` and `read_index("large.index")`. GPU indexes cannot be written. "It is the user's responsibility to verify that a file ... was not altered before reading" | Index IO |
 | Threads | Concurrent searches are supported on CPU; concurrent search and add, or add and add, are not, and there is no locking | FAQ |
 
-**What I did about the gaps.** Where the docs do not say, the code does not rely on a guess. `search_vector` limits `k` to the number of vectors, so no missing result should occur, and it also drops any id below zero if one appears. Either guard alone should be enough, and the test for `k` larger than the vector count will show it on the real library. Whether `IndexFlatIP` returns rows in decreasing similarity is checked by the ranking test against a brute-force ranking on the real library. I have not run that yet (see "Results"). This one-line check shows what a real flat index returns when `k` exceeds the vector count:
+**What I did about the gaps.** Where the docs do not say, the code does not rely on a guess. `search_vector` limits `k` to the number of vectors, so no missing result should occur, and it also drops any id below zero if one appears. Either guard alone should be enough, and the test for `k` larger than the vector count will show it on the real library. Whether `IndexFlatIP` returns rows in decreasing similarity is checked by the ranking test against a brute-force ranking, which passes on the real library. This one-line check shows what a real flat index returns when `k` exceeds the vector count:
 
 ```
 py -c "import faiss, numpy as np; i = faiss.IndexFlatIP(4); i.add(np.eye(4, dtype='float32')[:2]); print(i.search(np.ones((1, 4), dtype='float32'), 5))"
 ```
 
-**Pending:** the output of that command.
+`IndexFlatIP` with k = 5 and 2 stored vectors returned ids `[1, 0, -1, -1, -1]` and scores `[1.0, 1.0, -3.4028235e+38, -3.4028235e+38, -3.4028235e+38]` [Measured, one example, faiss 1.15.1]. So a missing result is id -1 with the most negative float32 as its score. Both guards in `search_vector` are useful: limiting `k` stops the placeholders from being requested, and dropping negative ids catches them if a placeholder ever comes back anyway. The two tied results came back as `[1, 0]`, not insertion order. That is one observation, not a rule. If ties ever matter, sort explicitly by (-score, id).
 
 ## Keeping vectors and chunk records together
 
@@ -57,7 +57,7 @@ FAISS knows only positions 0, 1, 2... Everything else (chunk id, text, section, 
 
 ## Pre-registration (written before the first run)
 
-I commit this section before running `compare_faiss.py` for the first time, so the git history shows the rules came first.
+I wrote this section before the first run of `compare_faiss.py` and did not change it afterwards. It was committed together with the results, so git history does not show the order.
 
 **Route: re-embed, then check against Chroma.** FAISS is built from the same chunks (`chunk_kb`, 800 characters, no overlap) and the same embedded text (`Chunk.embed_text` with the store's prefix setting). The script embeds the chunk texts once, compares those vectors with the ones Chroma stored (`collection.get(include=["embeddings"])`), and builds FAISS from exactly the vectors it checked. Re-embedding adds a second possible source of difference, the embedding step, alongside the index itself. The vector check measures that source directly. `--from-chroma-vectors` builds FAISS from Chroma's stored vectors instead, which removes the embedding step from the comparison. I use it if any rank differs, to tell an index difference from an embedding difference.
 
@@ -86,15 +86,58 @@ The tolerance, 1e-5, is about float32 rounding on cosine scores, and is the tole
 
 ## Results of `scripts/compare_faiss.py`
 
-**Measured: Pending.** Run `py scripts\compare_faiss.py` with the `ctx` and `noctx` stores built, and paste the output here. To fill in from that output: the route (re-embedded, unless I had to use `--from-chroma-vectors`), the largest vector difference for each setting, the norm and dtype lines, how many questions were identical, any ties or other differences, the largest score difference, the hit@k and MRR table, and the timing rows.
+**Route:** re-embedded, not `--from-chroma-vectors` [Measured].
 
-**Reading the timing rows.** The script times each setting, on queries embedded beforehand, so the numbers are the search alone. The three rows do different work:
+**Vectors, both settings [Measured].**
+
+- Chroma's stored vectors and the re-embedded vectors were float64, shape (14, 384), norms 0.9999999 to 1.0000001.
+- The FAISS vectors were float32, norms 1.0000000 to 1.0000001.
+- The largest stored-versus-re-embedded difference after normalizing was 8.460e-09 (noctx) and 6.952e-09 (ctx).
+
+So in this run, embedding the same text again gave the same vectors to within about 1e-8. The embedding step did not add a difference.
+
+**Questions [Measured].** 33 per setting (14 original, 11 variants, 8 independent). Ranked ids were identical for 33 of 33 in both settings. The largest score difference was 3.87e-07, below 1e-5.
+
+**Ties.** None occurred, so the tie rule was never exercised. It is written and tested on hand-made cases, but this run says nothing about how it behaves on real output.
+
+**hit@k and MRR [Measured].** Identical for both backends: each cell below is the same for Chroma and FAISS. The numbers also match the Step 4c table in `docs/retrieval_eval.md`.
+
+| Set | n | hit@1 | hit@3 | hit@5 | MRR |
+|---|---|---|---|---|---|
+| noctx original | 11 | 9 | 11 | 11 | 0.894 |
+| noctx variants | 11 | 7 | 10 | 10 | 0.773 |
+| ctx original | 11 | 10 | 11 | 11 | 0.939 |
+| ctx variants | 11 | 8 | 10 | 11 | 0.821 |
+| independent (both settings) | 2 | 2 | 2 | 2 | 1.000 |
+
+**Predictions against the result.**
+
+| Prediction | Result |
+|---|---|
+| Stored and re-embedded vectors differ by less than 1e-6 after normalizing | Met: 8.460e-09 and 6.952e-09 |
+| FAISS norms within 1e-5 of 1 | Met: the spread was about 1e-7 |
+| Chroma's stored norms about 1, if the model normalizes its output | Met: 0.9999999 to 1.0000001 |
+| All 33 questions identical in both settings, no ties, largest score difference below 1e-5 | Met: 33 of 33, no ties, 3.87e-07 |
+| Hit@k and MRR identical for both backends | Met |
+| Median search time well under 1 ms for every timing row | **Not met for Chroma.** Its median was 1673.9 µs in noctx and 969.2 µs in ctx: over 1 ms in one setting and just under it in the other. Met for both FAISS rows |
+
+**Timing [Measured].** The search alone, on pre-embedded queries, 14 vectors. Only the medians, and Chroma's minimums, are copied here; the remaining cells of the two timing blocks are not in these notes.
+
+| Row | noctx median | ctx median | Minimum |
+|---|---|---|---|
+| Chroma query | 1673.9 µs | 969.2 µs | 813 µs (noctx), 807 µs (ctx) |
+| FAISS search_vector | 32.6 µs | 32.6 µs | not copied |
+| FAISS bare search | 4.5 µs | 4.5 µs | not copied |
+
+Chroma's minimums are almost the same in both settings, but its medians differ by about 700 µs on the same 14 vectors. So its median is unstable at this size and should not be quoted as Chroma's speed. The three rows do different work:
 
 - **Chroma query** searches and returns documents, metadata and distances.
 - **FAISS search_vector** copies and normalizes the query, searches, and builds hit objects.
 - **FAISS bare search** searches a query normalized beforehand.
 
-A ratio between rows is not a finding that one backend is faster. Embedding a query is much slower than any of them: `retrieve()` took 33 to 52 ms in the Step 4b cross-check, including embedding and opening the store [Measured]. With 14 vectors, none of this says anything about scale.
+Do not read a ratio between the rows as "FAISS is N times faster". Embedding a query is slower than any of them: `retrieve()` took 33 to 52 ms in the Step 4b cross-check, including embedding and opening the store [Measured].
+
+**Scope.** At 14 vectors, HNSW effectively searches everything. This run shows that Chroma and FAISS agree here, not that they agree at scale.
 
 **At 100,000 vectors, all Untested.**
 
@@ -107,11 +150,11 @@ A ratio between rows is not a finding that one backend is faster. Embedding a qu
 | | FAISS (`IndexFlatIP`) | Chroma |
 |---|---|---|
 | Install | **Docs:** "The supported way to install Faiss is through conda" (`faiss-cpu=1.15.1`); that page does not mention pip. **Measured:** installed with `pip install faiss-cpu`, version 1.15.1 | **Measured:** `chromadb` 1.5.9 installed in the venv and used by the whole pipeline |
-| Persistence | **Docs:** `write_index` / `read_index`; files are not checked on load. **Pending:** the round-trip tests and the reload inside `compare_faiss.py` | **Docs:** `PersistentClient(path=...)`. **Measured:** the store tests pass on this machine; the current total is the one `py -m pytest` prints, **Pending** for this step |
+| Persistence | **Docs:** `write_index` / `read_index`; files are not checked on load. **Measured:** the round-trip tests pass, and `compare_faiss.py` saved, reloaded and searched the index in both settings | **Docs:** `PersistentClient(path=...)`. **Measured:** 390 tests pass, including the new ones |
 | Storing text and metadata | **Docs:** vectors only; flat indexes do not even store ids. The text, metadata and the position link are my `records.json` | **Docs:** documents, metadatas (string, integer, float, boolean) and ids are stored with the embeddings. **Measured:** `store.py` uses all three |
 | Updating and deleting | **Docs:** flat index supports `remove`, which "changes the numbering"; no `add_with_id` without `IndexIDMap`. My module does neither: it rebuilds | **Docs:** `upsert` (creates or updates by id), `delete(ids=...)`. **Measured:** `ingest_kb` adds, updates and deletes chunks by fingerprint, tested |
 | Metadata filtering | **Docs:** the FAQ says filtering must be based on vector ids; there is no metadata in the index. I would filter the results in Python. **Untested** | **Docs:** `where` on `get` and `query` (`$eq`, `$gt`, `$gte`, `$lte`, `$and`, `$or`, `$in`, `$nin`, `$contains`). The page does not say whether the filter is applied before or after the nearest-neighbor search. **Untested** by me |
-| Exact or approximate search | **Docs:** exact; every vector is compared | **Docs:** approximate (HNSW, `ef_search` default 100). **Pending:** whether it matches the exact result on my 33 questions per setting (14 vectors) |
+| Exact or approximate search | **Docs:** exact; every vector is compared | **Docs:** approximate (HNSW, `ef_search` default 100). **Measured:** HNSW matched the exact ranking on all 33 questions in both settings, at 14 vectors only |
 | What a search returns | **Docs:** scores and integer positions. Cosine distance is my `1 - score`; ordering for inner product is checked by my test, not stated in the pages I read | **Docs:** a distance; cosine distance is `1 - cosine similarity`, so `score = 1 - distance`. **Measured:** the scores matched my own cosine to 0.00001 |
 | Index types for scale | **Docs:** IVF partitions the vectors into `nlist` cells; "`IndexIVFPQ` is probably the most useful indexing structure for large-scale search"; `IndexHNSW` also exists (FAQ). **Untested** by me | **Docs:** HNSW on a single node (`space`, `ef_construction`, `ef_search`, `max_neighbors`); a different index (SPANN) in the distributed and cloud versions that cannot be configured. **Untested** beyond cosine space |
 | Threads | **Docs:** concurrent CPU searches are fine; search during add is not, and there is no locking | Not read |
@@ -126,7 +169,7 @@ A ratio between rows is not a finding that one backend is faster. Embedding a qu
 
 What would change my mind: a knowledge base of hundreds of thousands of chunks or more, where flat search becomes slow and I would want to choose the index type (IVF or HNSW with quantization); Chroma's approximate search missing a chunk that exact search finds (the compare script checks this on my questions, at 14 vectors); or needing a feature FAISS has and Chroma does not.
 
-**What I can claim afterwards.** I used Chroma in the pipeline (real chromadb 1.5.9, with the test totals that `py -m pytest` prints), built a FAISS index from the same chunks and text, and compared the two on a 14-chunk knowledge base with 33 questions per setting [after the run]. I have no experience with large-scale search. Everything I wrote about 100,000 vectors is a guess from the documentation.
+**What I can claim afterwards.** I used Chroma in the pipeline (real chromadb 1.5.9; 390 tests pass). I built a FAISS index from the same chunks and text, and compared the two on a 14-chunk knowledge base with 33 questions per setting: the top-5 chunk ids were identical for all 33 in both prefix settings, and scores differed by at most 3.87e-07. I have no experience with large-scale search. Everything I wrote about 100,000 vectors is a guess from the documentation.
 
 ## Sources
 
