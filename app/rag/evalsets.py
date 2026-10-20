@@ -9,7 +9,10 @@
 - **independent:** `eval/retrieval_independent.json`, questions written by someone
   who had not seen the documents, labeled afterwards. An empty `expected_sources`
   means the knowledge base cannot answer it. A question with no
-  `expected_sources` key at all is not labeled yet and is an error.
+  `expected_sources` key at all is not labeled yet and is an error. Each also
+  carries an `expected_route` (the main test set's vocabulary, `ROUTES`) and an
+  `expected_behavior`, and the route must agree with the other labels (see
+  `load_independent`).
 """
 
 from __future__ import annotations
@@ -20,6 +23,12 @@ from pathlib import Path
 
 ORIGINAL_SCORE_ONLY_IDS = ("Q09", "Q10", "Q20")
 
+# The routes used in eval/test_set.json.
+ROUTES = ("rag", "tool", "both", "rag_unanswerable", "rag_then_refer", "refuse")
+# Routes whose answer is built from a knowledge-base section, and routes that call a tool.
+ROUTES_WITH_SOURCES = ("rag", "both", "rag_then_refer")
+ROUTES_WITH_TOOL = ("tool", "both")
+
 
 @dataclass(frozen=True)
 class EvalQuestion:
@@ -29,6 +38,11 @@ class EvalQuestion:
     group: str  # "original", "variants" or "independent"
     style: str | None = None  # how a variant was reworded
     base_id: str | None = None  # the original question a variant rewords
+    route: str | None = None  # expected_route; set for original and independent questions
+    behavior: str | None = None  # what a correct answer does (independent questions)
+    tool: str | None = None  # expected_tool, for routes that call one
+    must_contain: tuple[str, ...] = ()  # strings a correct answer states (independent questions)
+    related: tuple[str, ...] = ()  # sections that are close but do not answer the question
 
 
 def split_answerable(questions: list[EvalQuestion]) -> tuple[list[EvalQuestion], list[EvalQuestion]]:
@@ -44,7 +58,10 @@ def original_questions(test_set: list[dict]) -> list[EvalQuestion]:
         raise ValueError(f"the test set has no question(s) {missing}")
     chosen = [q for q in test_set if q.get("expected_sources") or q["id"] in ORIGINAL_SCORE_ONLY_IDS]
     return [
-        EvalQuestion(q["id"], q["question"], tuple(q.get("expected_sources") or ()), "original")
+        EvalQuestion(
+            q["id"], q["question"], tuple(q.get("expected_sources") or ()), "original",
+            route=q.get("expected_route"),
+        )
         for q in chosen
     ]
 
@@ -92,8 +109,26 @@ def load_variants(path: Path, test_set: list[dict]) -> list[EvalQuestion]:
     return questions
 
 
+def _optional_strings(item: dict, field: str, where: str) -> tuple[str, ...]:
+    value = item.get(field, [])
+    if not isinstance(value, list) or not all(isinstance(v, str) and v.strip() for v in value):
+        raise ValueError(f"{where}: '{field}' must be a list of non-empty strings")
+    return tuple(value)
+
+
 def load_independent(path: Path) -> list[EvalQuestion]:
-    """Independently written questions. Every one must already be labeled with `expected_sources`."""
+    """Independently written questions. Every one must already be labeled.
+
+    Required: `expected_sources` (a list; `[]` if the knowledge base cannot answer it),
+    `expected_route` (one of `ROUTES`) and `expected_behavior` (text). The route must
+    agree with the other labels, so a mislabel is an error and not a quiet skew:
+
+    - `rag`, `both`, `rag_then_refer` need at least one expected source;
+    - `tool`, `rag_unanswerable`, `refuse` need none;
+    - `tool` and `both` need an `expected_tool`; the other routes must not have one.
+
+    Optional: `related_sections` and `must_contain` (lists of strings).
+    """
     questions = []
     for item in _load_list(path):
         where = f"{Path(path).name}: {item.get('id', '?')}"
@@ -105,6 +140,34 @@ def load_independent(path: Path) -> list[EvalQuestion]:
         expected = item["expected_sources"]
         if not isinstance(expected, list) or not all(isinstance(s, str) and s for s in expected):
             raise ValueError(f"{where}: expected_sources must be a list of section ids")
-        questions.append(EvalQuestion(qid, text, tuple(expected), "independent"))
+
+        if "expected_route" not in item:
+            raise ValueError(f"{where}: not labeled yet (no 'expected_route'; one of {', '.join(ROUTES)})")
+        route = item["expected_route"]
+        if route not in ROUTES:
+            raise ValueError(f"{where}: expected_route {route!r} is not one of {', '.join(ROUTES)}")
+        behavior = _require_text(item, "expected_behavior", where)
+
+        if route in ROUTES_WITH_SOURCES and not expected:
+            raise ValueError(f"{where}: route {route!r} needs at least one expected source")
+        if route not in ROUTES_WITH_SOURCES and expected:
+            raise ValueError(f"{where}: route {route!r} must have no expected sources")
+        tool = item.get("expected_tool")
+        if route in ROUTES_WITH_TOOL:
+            if not isinstance(tool, str) or not tool.strip():
+                raise ValueError(f"{where}: route {route!r} needs an 'expected_tool'")
+        elif tool is not None:
+            raise ValueError(f"{where}: route {route!r} must not have an 'expected_tool'")
+
+        questions.append(
+            EvalQuestion(
+                qid, text, tuple(expected), "independent",
+                route=route,
+                behavior=behavior,
+                tool=tool,
+                must_contain=_optional_strings(item, "must_contain", where),
+                related=_optional_strings(item, "related_sections", where),
+            )
+        )
     _check_unique([q.id for q in questions], Path(path).name)
     return questions

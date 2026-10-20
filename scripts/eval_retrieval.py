@@ -2,7 +2,7 @@
 
 First build two stores from the same knowledge base (800 characters, no overlap):
 
-    py scripts/ingest_kb.py --db chroma_db/ctx
+    py scripts/ingest_kb.py --db chroma_db/ctx --context
     py scripts/ingest_kb.py --db chroma_db/noctx --no-context
 
 Then, from the project root:
@@ -84,7 +84,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{label:<6} {dbs[label]} | {info['count']} chunks | {info['embedder_name']} | with_context={info['with_context']}")
             if info["with_context"] is not wanted:
                 print(f"ERROR: the '{label}' store must be built {'with' if wanted else 'without'} the prefix "
-                      f"(scripts/ingest_kb.py{'' if wanted else ' --no-context'} --db <path>).")
+                      f"(scripts/ingest_kb.py {'--context' if wanted else '--no-context'} --db <path>).")
                 return 1
         print(f"retrieving the top {args.k} chunks per question\n")
 
