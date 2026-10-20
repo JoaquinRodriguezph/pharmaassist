@@ -5,13 +5,13 @@ How often the right section lands in the top k, with and without the document/se
 ## Setup
 
 ```
-py scripts\ingest_kb.py --db chroma_db\ctx
+py scripts\ingest_kb.py --db chroma_db\ctx --context
 py scripts\ingest_kb.py --db chroma_db\noctx --no-context
 py scripts\eval_retrieval.py                                         # original + variants
 py scripts\eval_retrieval.py --sets original variants independent    # adds the independent questions
 ```
 
-Both stores hold the same 14 chunks (800 characters, no overlap) from the same knowledge base, embedded with `all-MiniLM-L6-v2`. Only the prefix differs. Each ingest took about 0.6 s [Measured: 0.58 s and 0.60 s]. The script checks that the two stores really were built with and without the prefix.
+Both stores hold the same 14 chunks (800 characters, no overlap) from the same knowledge base, embedded with `all-MiniLM-L6-v2`. Only the prefix differs. The two commands name the prefix explicitly, so the result does not depend on `RAG_WITH_CONTEXT`. Each ingest took about 0.6 s [Measured: 0.58 s and 0.60 s]. The script checks that the two stores really were built with and without the prefix.
 
 ## Metrics
 
@@ -28,22 +28,35 @@ Defined in `app/rag/metrics.py`, in terms of the section id of each retrieved ch
 | Set | Questions | Written by | Leakage |
 |---|---|---|---|
 | original | 11 with expected sections (Q01 to Q08, Q17, Q18, Q19), plus Q09, Q10 and Q20 by score | the test set | The documents were written after these questions, to hold exactly the facts they ask for, so this set flatters retrieval |
-| variants | 11, one per question: keywords only (2), typo-heavy (2), different phrasing (2), Taglish (2), very short, long and chatty, different vocabulary | Claude, after seeing the documents | Written knowing what the documents say, so fairer in wording but not independent |
-| independent | 8, in the writer's own words about returns, expiry, storage temperature, paracetamol and ibuprofen | someone who had not seen the documents, given only the topic list; labeled by me afterwards | This is the set that reduces the problem. **Received, labeled and run** (results below) |
+| variants | 11, one per question: keywords only (2), typo-heavy (2), different phrasing (2), Taglish (2), very short, long and chatty, different vocabulary | me, after seeing the documents | Written knowing what the documents say, so fairer in wording but not independent |
+| independent | 8, in the writer's own words about returns, expiry, storage temperature, paracetamol and ibuprofen | someone who had not seen the documents, given only the topic list; labeled by me afterwards | This is the set that reduces the problem. Received, labeled and run (results below), but only two of its eight questions can be scored by rank, so I am asking a second writer for ten more questions about what the rules say |
 
 Q17 and Q18 also need a tool call in the full system; here only the document part is measured, using the question as written.
 
 ### The independent questions and how I labeled them [Judged]
 
-A question gets an expected section only if the knowledge base holds a rule or fact that a correct answer must be based on. A question whose answer needs live information (a log reading, a box's location, shelf contents, a delivery's history, a checklist, the air conditioning) gets an empty list, even when a section is on the same topic. Those sections are recorded as `related_sections` in the file for reference; they are not scored.
+Each question gets three labels, and the loader (`load_independent` in `app/rag/evalsets.py`) rejects a file in which they disagree.
 
-| Id | Labeled | Why |
-|---|---|---|
-| IND04 (expired paracetamol drops, "pull-out bin") | `Expired-Medications` | Expired stock is logged by batch number and moved to the quarantine bin |
-| IND05 (blister seal popped) | `Customer-Returns` | Returns need an unopened item with an intact tamper seal |
-| IND01, IND02, IND03, IND06, IND07, IND08 | none | Each asks about live state the knowledge base does not hold |
+- **`expected_sources`:** a section only if the knowledge base holds a rule or fact that a correct answer must be based on. A question whose answer needs live information (a log reading, a box's location, shelf contents, a delivery's history, a checklist, the air conditioning) gets an empty list, even when a section is on the same topic. Those sections are recorded as `related_sections` for reference; they are not scored by rank.
+- **`expected_route`:** one of the routes in `eval/test_set.json` (`rag`, `tool`, `both`, `rag_unanswerable`, `rag_then_refer`, `refuse`). `rag`, `both` and `rag_then_refer` need an expected source; `tool` and `both` need an `expected_tool`.
+- **`expected_behavior`**, and for most questions `must_contain`: what a correct answer does, and strings it must state. A test checks that every `must_contain` string really appears in the question's expected or related sections.
 
-**[Observed]** Six of the eight independent questions are about the store's current state, which in the full system would be live-data (tool) questions, not document lookups, and only two are answerable from the documents. The two that are answerable use different words from the documents ("pull-out bin" for the quarantine bin, "blister seal popped" for a broken tamper seal). So the independent set can only add two measured questions, and the six unanswerable ones will show scores only. If you disagree with a label, change `expected_sources` in `eval/retrieval_independent.json`; a looser rule that labels the related sections would make all six of the others answerable too.
+I first assumed the six situational questions would be tool questions. That was wrong for most of them: a box's location, sunlight on a delivery, an air-conditioning fault and an audit checklist are not in any tool's data either. Only IND03 maps to a tool.
+
+| Id | Route | Expected sources | Why |
+|---|---|---|---|
+| IND04 (expired paracetamol drops, "pull-out bin") | `rag` | `Expired-Medications` | Expired stock is logged by batch number and moved to the quarantine bin |
+| IND05 (blister seal popped) | `rag` | `Customer-Returns` | Returns need an unopened item with an intact tamper seal |
+| IND03 (near-expiry ibuprofen syrup on a shelf) | `tool` (`get_expiring_batches`) | none | Near-expiry stock is what `/reports/expiring` returns. No branch is named, so `expected_args` is null and the assistant should ask which branch. The data has no shelf location |
+| IND01 (did the stockroom log stay under 25°C) | `rag_unanswerable` | none; related `Temperature-Monitoring` | No tool reports temperature readings; the log is a paper sheet |
+| IND02 (where a returned box is, was it tagged) | `rag_unanswerable` | none; related `Customer-Returns`, `Expired-Medications` | One box's location and tag are not in any data |
+| IND06 (delivery left in sunlight) | `rag_unanswerable` | none; related `Receiving-And-FEFO` | What happened to a delivery is not in any data, and the SOP says nothing about sunlight |
+| IND07 (children's ibuprofen in today's audit checklist) | `rag_unanswerable` | none; related `Expired-Medications` | A checklist is not data; the tool lists expiry dates but not checklists |
+| IND08 (why a shelf feels warm, AC or thermostat) | `rag_unanswerable` | none; related `Temperature-Monitoring` | Equipment status is not data |
+
+**Expected behavior for the five `rag_unanswerable` questions.** Each answer must do two things: state the rule from the related section (for example 15°C-25°C and the same-day report to the supervising pharmacist for IND01 and IND08; the 90-day pull and the monthly check for IND07), and say that the assistant cannot see live logs or the current state. It must not answer the live question itself: no "yes, it stayed under 25°C", and no "the box was tagged". This goes beyond Q09 and Q10, which only require saying the information is not in the documents. The main test set has no question of this kind, which is a gap I should fill there too.
+
+**[Observed]** Of the eight independent questions, two are answerable from the documents, one is a tool question and five are situational questions with a rule to state. The two answerable ones use different words from the documents ("pull-out bin" for the quarantine bin, "blister seal popped" for a broken tamper seal). So the independent set can only add two questions that are scored by rank, and the other six show scores only. A looser rule that labeled the related sections as expected would make five of the others scorable, but it would reward retrieving a section that cannot answer the question. If I later disagree with a label, I change it in `eval/retrieval_independent.json`.
 
 ## Predictions (written before the first run) and what happened
 
@@ -171,13 +184,14 @@ Rank-1 misses [Measured]: with the prefix Q08, V02, V08, V09; without it Q02, Q0
 
 - **Small and hand-built.** 22 questions (11 original and 11 variants) against 14 chunks written for the purpose, plus two answerable independent questions. A difference of one question is within what a reworded question could change.
 - **Chance is high on a store this small [Derived].** A random ranking would put a given single-chunk section in the top 1 about 7% of the time (1 of 14), the top 3 about 21% and the top 5 about 36%, so hit@5 is an easy bar. Hit@1 and MRR are more informative.
-- **The variants share a writer with the documents.** They were written by the assistant that saw the documents.
+- **The variants share a writer with the documents.** I wrote them after seeing the documents.
 - **One embedding model, one chunking setting.** At 800/0 only one section is split, so the repeat counts say little; at 400 characters almost every section splits.
-- **The independent set is eight questions, and six are about live state.** Two could be measured, and both were hits, so it does not separate the two prefix settings either.
+- **The independent set is eight questions, and six are about live state.** Two could be scored by rank, and both were hits, so it does not separate the two prefix settings either. Ten more questions from a second writer are being requested.
 - **Scores do not make a threshold** (see Q20 and the independent questions).
 
 ## Decision for Step 5
 
 - **k = 5.** The rule I wrote before the run was: use the smallest of 3 or 5 for which every answerable question has a hit; if hit@3 misses any, use 5. Hit@3 misses V08 in both stores, so k is 5, and never 1 (4 of the 22 questions miss rank 1 with the prefix and 6 without it). Even k=5 misses V08 in the no-prefix store [Measured], so no setting here gives every question a hit.
 - **Chunks, not distinct sections, for now.** Repeats took 3 of the 55 top-5 slots on the original questions with the prefix [Derived: 11 questions x 5 slots], and MRR is the same either way. This will need another look if a smaller `max_chars` makes more sections split.
-- **Prefix: no prefix, as a weak call.** The two settings cannot be separated, so I applied the tie-break I wrote before the run: no prefix, because it is simpler, it embeds exactly the text that is shown, and (I wrote) it showed no benefit. That last reason is now too strong: the numbers lean toward the prefix, 4 questions better against 1 worse, and V08 is a hit at k=5 only with it. I am keeping the rule because changing it after seeing the results would be choosing the answer I like. Because the difference is small and reversible (`ingest_kb.py` with or without `--no-context`, and the store re-embeds everything), revisit it when the independent questions are measured and when the knowledge base has similar sections in different documents, which is where a prefix could help.
+- **Context budget with k = 5 [Derived].** The five longest chunks are 174 + 169 + 164 + 152 + 151 = 810 tokens without the prefix, and 186 + 182 + 174 + 171 + 168 = 881 with it (token counts from the table in `docs/retrieval_notes.md`, counted with the MiniLM tokenizer). Either is well inside Ollama's 4096-token default context (`docs/local_model_notes.md`). That count is for the chunks only, and it is MiniLM's tokenizer, not Llama's, so it is a rough guide. In Step 5, I recount with Llama's own tokenizer, and add the system prompt, the question, the conversation history and the room the answer needs.
+- **Prefix: a setting, defaulting to off.** The two settings cannot be separated, so I applied the tie-break I wrote before the run: no prefix, because it is simpler, it embeds exactly the text that is shown, and (I wrote) it showed no benefit. That last reason is now too strong: the numbers lean toward the prefix, 4 questions better against 1 worse, and V08 is a hit at k=5 only with it. I am keeping the rule because changing it after seeing the results would be choosing the answer I like. Because the difference is small and reversible, the choice is not hardcoded: it is the `RAG_WITH_CONTEXT` environment variable (read by `app/rag/config.py`; unset means off; `--context` and `--no-context` on `scripts/ingest_kb.py` override it). Changing it re-embeds every chunk. I revisit it when the second writer's questions are scored and when the knowledge base has similar sections in different documents, which is where a prefix could help.

@@ -1,9 +1,113 @@
-   # Evaluation set
-
-   expected_route values:
-   - rag: answer from knowledge-base documents, with citation
-   - rag_unanswerable: search finds nothing relevant; must say so, no guessing
-   - rag_then_refer: retrieve relevant text, then refuse personal advice and refer to a pharmacist
-   - tool: call a tracker endpoint (read-only)
-   - both: needs a tracker call and a document search
-   - refuse: out of scope, medical, or injection; return the static refusal
+[
+  {
+    "id": "V01",
+    "base_id": "Q01",
+    "style": "keywords only",
+    "question": "amoxicillin refund unopened receipt",
+    "expected_sources": [
+      "returns_and_expiry_policy.md#Customer-Returns"
+    ],
+    "written_by": "me, after seeing the documents"
+  },
+  {
+    "id": "V02",
+    "base_id": "Q02",
+    "style": "typo-heavy",
+    "question": "hw many dayz b4 expiry do we pull stuff off the shelf n where do they go",
+    "expected_sources": [
+      "returns_and_expiry_policy.md#Expired-Medications"
+    ],
+    "written_by": "me, after seeing the documents"
+  },
+  {
+    "id": "V03",
+    "base_id": "Q03",
+    "style": "different phrasing",
+    "question": "A customer wants to bring back a sealed bottle of vitamins they paid for five days ago and still has the receipt. Do we take it back?",
+    "expected_sources": [
+      "returns_and_expiry_policy.md#Customer-Returns"
+    ],
+    "written_by": "me, after seeing the documents"
+  },
+  {
+    "id": "V04",
+    "base_id": "Q04",
+    "style": "Taglish",
+    "question": "Yung vaccine fridge sa backroom umabot ng 10.5C kaninang umaga, mga 45 minutes siyang lampas sa 8C. Ano ang SOP natin dito?",
+    "expected_sources": [
+      "storage_sop.md#Cold-Chain-And-Excursions"
+    ],
+    "written_by": "me, after seeing the documents"
+  },
+  {
+    "id": "V05",
+    "base_id": "Q05",
+    "style": "very short",
+    "question": "temp log schedule and acceptable range",
+    "expected_sources": [
+      "storage_sop.md#Temperature-Monitoring"
+    ],
+    "written_by": "me, after seeing the documents"
+  },
+  {
+    "id": "V06",
+    "base_id": "Q06",
+    "style": "long and chatty",
+    "question": "Hi, quick one: we have a regular who keeps asking how many of the 500mg paracetamol tablets is the most an adult can have in one day, and I want to give the right answer straight from the leaflet. What's the limit?",
+    "expected_sources": [
+      "paracetamol_leaflet.md#Dosage-And-Administration"
+    ],
+    "written_by": "me, after seeing the documents"
+  },
+  {
+    "id": "V07",
+    "base_id": "Q07",
+    "style": "typo-heavy",
+    "question": "paracetmol leaflet any warning abt alchohol or cough n cold medcine taken wth it",
+    "expected_sources": [
+      "paracetamol_leaflet.md#Warnings-And-Precautions"
+    ],
+    "written_by": "me, after seeing the documents"
+  },
+  {
+    "id": "V08",
+    "base_id": "Q08",
+    "style": "Taglish",
+    "question": "Sino-sino ang hindi pwedeng uminom ng ibuprofen ayon sa product leaflet natin?",
+    "expected_sources": [
+      "ibuprofen_leaflet.md#Contraindications"
+    ],
+    "written_by": "me, after seeing the documents"
+  },
+  {
+    "id": "V09",
+    "base_id": "Q17",
+    "style": "different phrasing",
+    "question": "List the batches close to expiry at the Manila Main branch and tell me what the policy says to do with them.",
+    "expected_sources": [
+      "returns_and_expiry_policy.md#Expired-Medications"
+    ],
+    "written_by": "me, after seeing the documents"
+  },
+  {
+    "id": "V10",
+    "base_id": "Q18",
+    "style": "keywords only",
+    "question": "receiving restock delivery FEFO storage temperature SOP",
+    "expected_sources": [
+      "storage_sop.md#Receiving-And-FEFO",
+      "storage_sop.md#Temperature-Monitoring"
+    ],
+    "written_by": "me, after seeing the documents"
+  },
+  {
+    "id": "V11",
+    "base_id": "Q19",
+    "style": "different vocabulary",
+    "question": "Is ibuprofen okay to take with my hypertension pills? bad headache today",
+    "expected_sources": [
+      "ibuprofen_leaflet.md#Drug-Interactions"
+    ],
+    "written_by": "me, after seeing the documents"
+  }
+]

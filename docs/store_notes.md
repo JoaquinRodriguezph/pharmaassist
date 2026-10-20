@@ -1,6 +1,6 @@
 # Store notes (Step 4b)
 
-The Chroma store in `app/rag/store.py`: what the Chroma documentation says, the decisions made, and what has and has not been checked. Labels: **Docs** = stated in the Chroma documentation (docs.trychroma.com and cookbook.chromadb.dev, read on 19 October 2026). **Stand-in** = checked only against a stand-in for Chroma that I wrote from those docs, which is not the real library. **Pending** = needs a run on this machine.
+The Chroma store in `app/rag/store.py`: what the Chroma documentation says, the decisions made, and what has and has not been checked. Labels: **Docs** = stated in the Chroma documentation (docs.trychroma.com and cookbook.chromadb.dev, read on 19 October 2026). **Measured** = printed by a command run on this machine. **Observed** = something I saw that was not a printed figure.
 
 ## What the Chroma docs say
 
@@ -17,7 +17,7 @@ The Chroma store in `app/rag/store.py`: what the Chroma documentation says, the 
 | Deleting | `collection.delete(ids=[...])` | Docs |
 | Default embedding function | When documents or query texts are given without embeddings, Chroma embeds them with its own default function, which is `all-MiniLM-L6-v2` run locally and downloaded automatically | Docs (embedding functions) |
 
-**The silent-default trap.** Chroma's default function is the same model name as ours but a separate copy running through a different runtime. A call that forgot to pass embeddings would use it silently, and the scores would come from a different pipeline. So `store.py` passes `embeddings=` on every write and `query_embeddings=` on every read, and creates the collection with `embedding_function=None`. I assumed `None` switches the default off in the Python client; I did not see that stated for Python. If your Chroma rejects it, the first run will say so, and the fix is a one-line change.
+**The silent-default trap.** Chroma's default function has the same model name as the one I embed with, but it is a separate copy running through a different runtime. A call that forgot to pass embeddings would use it silently, and the scores would come from a different pipeline. So `store.py` passes `embeddings=` on every write and `query_embeddings=` on every read, and creates the collection with `embedding_function=None`. I assumed `None` switches the default off in the Python client, and I did not see that stated for Python. Real chromadb 1.5.9 accepted it (see "Checked and not checked"), but that shows only that the call is accepted, not that no default function runs; the cosine check in the trap test is what shows the scores come from my own vectors.
 
 ## Decisions
 
@@ -35,7 +35,7 @@ The Chroma store in `app/rag/store.py`: what the Chroma documentation says, the 
 
 **What counts as "no collection".** Only a name that `list_collections()` does not list. The first version treated any error from `get_collection` as "not found", which would have read a corrupt database as an empty one and started a new store on top of it. Now any other error propagates. `list_collections()` returns `Collection` objects in Chroma 1.x and names in 0.6.x (Chroma's migration guide), so the code reads each entry's name with `getattr` and works with both. Tests cover a missing name, both return types, and errors while listing and while fetching a listed collection; the last test also checks that ingest and retrieve stop and create nothing.
 
-**[Measured, chromadb 1.5.9]** `get_collection('nope')` raises `chromadb.errors.NotFoundError: Collection [nope] does not exist`, so that is the exception a missing collection gives; the store does not rely on it. `list_collections()` on an empty store returns a plain `list`. A non-empty store gives `[Collection(name=abc)]`: Collection objects, as the 1.x documentation says (the first command I gave you failed because it used a collection name that is too short; Chroma requires 3 to 512 characters).
+**[Measured, chromadb 1.5.9]** `get_collection('nope')` raises `chromadb.errors.NotFoundError: Collection [nope] does not exist`, so that is the exception a missing collection gives; the store does not rely on it. `list_collections()` on an empty store returns a plain `list`. A non-empty store gives `[Collection(name=abc)]`: Collection objects, as the 1.x documentation says (my first check used the collection name 'x', which failed because Chroma requires 3 to 512 characters; I reran it with 'abc').
 
 **Smaller choices.** Stored ids are read page by page, because I did not want to rely on `get` returning everything by default. `k` larger than the collection returns everything. A missing store is reported and not created, because `PersistentClient` would otherwise create an empty one. The collection name is `pharmaassist_kb`. `retrieve` opens the store on every call, which is simple, and the timing in `try_retrieval.py` includes it.
 
@@ -51,16 +51,16 @@ The Chroma store in `app/rag/store.py`: what the Chroma documentation says, the 
 
 Real run on this machine: Python 3.12.10, chromadb 1.5.9, sentence-transformers 6.1.0.
 
-- **[Measured] The tests pass against real Chroma.** `py -m pytest -v` gave 231 passed in 19.47 s, including all 26 store and embedding tests; after the not-found fix and the Step 4c code it gave 296 passed in 19.68 s, including the six new lookup tests, and 297 passed in 19.20 s once the independent-questions test was added. Of the assumptions listed before the run: `embedding_function=None` was accepted; `configuration={"hnsw": {"space": "cosine"}}` was accepted; `get` with `limit` and `offset` worked; returned embeddings could be compared with our own cosine function; a boolean in the collection metadata came back as a boolean (`with_context is False`); and on a fresh folder a missing collection was treated as "not found" and created. The trap test passing on real Chroma shows the collection really uses cosine space: the stored scores matched our own cosine to within 0.00001.
+- **[Measured] The tests pass against real Chroma.** `py -m pytest -v` gave 231 passed in 19.47 s, including all 26 store and embedding tests; after the not-found fix and the Step 4c code it gave 296 passed in 19.68 s, including the six new lookup tests, and 297 passed in 19.20 s once the independent-questions test was added. Of the assumptions listed before the run: `embedding_function=None` was accepted; `configuration={"hnsw": {"space": "cosine"}}` was accepted; `get` with `limit` and `offset` worked; returned embeddings could be compared with my own cosine function; a boolean in the collection metadata came back as a boolean (`with_context is False`); and on a fresh folder a missing collection was treated as "not found" and created. The trap test passing on real Chroma shows the collection really uses cosine space: the stored scores matched my own cosine to within 0.00001.
 - **Not exercised:** paging in `get` beyond one page (the store has 14 chunks and the page size is 500), and a store with an existing folder but no collection.
-- **Stand-in:** earlier, the same tests passed against my stand-in for Chroma, and the trap test failed on a copy without the cosine configuration. That showed the test could catch the mistake; the real library has now passed it.
+- **Earlier fake:** before the real run, the store tests had only been run against a fake Chroma written from the docs, and the trap test failed on a copy of it without the cosine configuration. That showed the test could catch the mistake. Those results said nothing about the real library; the real run above replaces them.
 
 ## Cross-check with the real model
 
-`py scripts\ingest_kb.py`, then `py scripts\try_retrieval.py`, with the prefix on (the default).
+`py scripts\ingest_kb.py --context`, then `py scripts\try_retrieval.py`, with the prefix on.
 
 - **[Measured]** The first ingest added 14 chunks and took 0.80 s; the second run reported `unchanged=14` and took 0.16 s, because nothing was embedded again.
 - **[Measured]** The top 3 for Q01, Q06 and Q08 match the Step 4a "with prefix" table in every position: 9 of 9, the same chunk and the same score to three decimals (for example Q08: 0.762, 0.693, 0.671, with Contraindications third). So the whole path agrees: chunking, the prefix setting, Chroma's cosine distance and `score = 1 - distance`.
 - **[Measured]** `retrieve()` took 52, 36 and 37 ms on the first pass and 35, 34 and 33 ms on the second. That includes embedding the query and opening the store, on 14 chunks on this CPU.
 - **Not yet done:** the same cross-check with `--no-context` against the "without prefix" table.
-- **[Observed]** The first `py scripts\try_retrieval.py` in the pasted session printed nothing and the second worked. I do not know why; if it happens again, send me the output.
+- **[Observed]** The first `py scripts\try_retrieval.py` in my terminal session printed nothing and the second run worked. I do not know why. If it happens again I will save the full output and look at it then.

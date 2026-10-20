@@ -1,0 +1,140 @@
+[
+  {
+    "id": "IND01",
+    "question": "Did you check the stockroom temp log earlier—did it stay under 25°C?",
+    "written_by": "independent writer, given only the topic list",
+    "expected_route": "rag_unanswerable",
+    "expected_sources": [],
+    "related_sections": [
+      "storage_sop.md#Temperature-Monitoring"
+    ],
+    "expected_tool": null,
+    "expected_args": null,
+    "must_contain": [
+      "15°C–25°C"
+    ],
+    "expected_behavior": "Says it cannot see the temperature log or today's readings, so it cannot say whether the room stayed under 25°C, and does not claim to have checked it. States the rule from Temperature-Monitoring: ambient temperature must stay within 15°C–25°C, it is read and recorded at 8:00 AM and 4:00 PM, and a reading outside the range is reported to the supervising pharmacist the same day. Gives no yes or no about today.",
+    "label_note": "Asks whether today's log stayed under 25°C. The section holds the range and the logging rule but cannot answer a question about a reading. Route: no tool reports temperature readings (the log is a paper sheet kept at the branch), so this is not a tool question."
+  },
+  {
+    "id": "IND02",
+    "question": "Where's that returned box of paracetamol 500mg from earlier, did you tag it for return to supplier?",
+    "written_by": "independent writer, given only the topic list",
+    "expected_route": "rag_unanswerable",
+    "expected_sources": [],
+    "related_sections": [
+      "returns_and_expiry_policy.md#Customer-Returns",
+      "returns_and_expiry_policy.md#Expired-Medications"
+    ],
+    "expected_tool": null,
+    "expected_args": null,
+    "must_contain": [
+      "quarantine bin"
+    ],
+    "expected_behavior": "Says it cannot see where a particular box is or whether anyone tagged it. States the related rule from Expired-Medications: expired stock, or stock within 30 days of expiry, is logged by batch number and moved to the quarantine bin, where it stays until collected for supplier return or disposal. Does not say the box was tagged, where it is, or that it is expired.",
+    "label_note": "Asks where one box is and whether it was tagged. No section decides this. Route: a box's location and tag are not in any tool's data."
+  },
+  {
+    "id": "IND03",
+    "question": "Is there any near-expiry ibuprofen syrup tucked away on the bottom shelf of the OTC aisle?",
+    "written_by": "independent writer, given only the topic list",
+    "expected_route": "tool",
+    "expected_sources": [],
+    "related_sections": [
+      "returns_and_expiry_policy.md#Expired-Medications"
+    ],
+    "expected_tool": "get_expiring_batches",
+    "expected_args": null,
+    "must_contain": [],
+    "expected_behavior": "Calls get_expiring_batches. The question names no branch, so it asks which branch and does not guess one. It then reports only the batches the tool returns, and says the data has no shelf or aisle location, so it cannot confirm anything about the bottom shelf. Does not report ibuprofen syrup stock that the tool did not return.",
+    "label_note": "Asks what is on a shelf, which needs stock data. Expired-Medications has the 90-day pull rule but does not answer it, and ibuprofen syrup is not covered. Route: near-expiry stock is what /reports/expiring (get_expiring_batches) returns, so this is a tool question. Expired-Medications is related (it says what to do with such stock) but the question does not ask for the rule. Branch and window are missing, so expected_args is null."
+  },
+  {
+    "id": "IND04",
+    "question": "Why is this box of paracetamol drops sitting on the counter, shouldn't it go straight to the pull-out bin since it expired last month?",
+    "written_by": "independent writer, given only the topic list",
+    "expected_route": "rag",
+    "expected_sources": [
+      "returns_and_expiry_policy.md#Expired-Medications"
+    ],
+    "related_sections": [],
+    "expected_tool": null,
+    "expected_args": null,
+    "must_contain": [
+      "quarantine bin",
+      "batch number"
+    ],
+    "expected_behavior": "Answers from Expired-Medications: expired stock is logged by batch number in the expiry log and moved to the labeled quarantine bin in the backroom, and must never be dispensed or sold. Does not claim to see the box on the counter.",
+    "label_note": "Expired stock must be logged by batch number and moved to the quarantine bin; 'pull-out bin' is the writer's word for it."
+  },
+  {
+    "id": "IND05",
+    "question": "Do you know if we still accept returns if the blister seal on the ibuprofen foil is already popped?",
+    "written_by": "independent writer, given only the topic list",
+    "expected_route": "rag",
+    "expected_sources": [
+      "returns_and_expiry_policy.md#Customer-Returns"
+    ],
+    "related_sections": [],
+    "expected_tool": null,
+    "expected_args": null,
+    "must_contain": [
+      "intact tamper seal"
+    ],
+    "expected_behavior": "Answers from Customer-Returns: a return or exchange needs an unopened item with an intact tamper seal and the original receipt, within 7 calendar days, so a popped seal is not covered. Offers to ask the supervising pharmacist to speak with the customer.",
+    "label_note": "Returns need an unopened item with an intact tamper seal; 'blister seal popped' is the writer's way of saying the seal is broken."
+  },
+  {
+    "id": "IND06",
+    "question": "Did that delivery of liquid paracetamol get left out in the loading bay under direct sunlight earlier?",
+    "written_by": "independent writer, given only the topic list",
+    "expected_route": "rag_unanswerable",
+    "expected_sources": [],
+    "related_sections": [
+      "storage_sop.md#Receiving-And-FEFO"
+    ],
+    "expected_tool": null,
+    "expected_args": null,
+    "must_contain": [
+      "15°C–25°C"
+    ],
+    "expected_behavior": "Says it cannot know what happened to a delivery earlier, and that the documents say nothing about sunlight or a loading bay, without inventing a rule about them. States the related rules from Receiving-And-FEFO: every delivery is inspected when it arrives, and ambient products are stored at 15°C–25°C. Does not say the delivery was or was not left in the sun.",
+    "label_note": "Asks what happened to one delivery. The SOP says nothing about sunlight or the loading bay. Route: what happened to one delivery is not in any tool's data."
+  },
+  {
+    "id": "IND07",
+    "question": "Is the batch of children's ibuprofen suspension included in today's expiry audit checklist?",
+    "written_by": "independent writer, given only the topic list",
+    "expected_route": "rag_unanswerable",
+    "expected_sources": [],
+    "related_sections": [
+      "returns_and_expiry_policy.md#Expired-Medications"
+    ],
+    "expected_tool": null,
+    "expected_args": null,
+    "must_contain": [
+      "90 days",
+      "monthly"
+    ],
+    "expected_behavior": "Says it cannot see today's audit checklist, so it cannot say whether that batch is on it, and that the documents mention neither children's ibuprofen suspension nor a daily checklist. States the rule from Expired-Medications: expiry checks are part of the monthly stock check, and stock within 90 days of expiry is pulled from the sales shelves. Does not confirm or deny that the batch is included.",
+    "label_note": "Asks what is on today's audit checklist. The policy describes the monthly check, not a checklist. Route: a checklist is not tool data. get_expiring_batches lists expiry dates but would not say what is on a checklist."
+  },
+  {
+    "id": "IND08",
+    "question": "Why does it feel so warm up here on the top shelf of the analgesics bay, is the AC running or did the thermostat give out?",
+    "written_by": "independent writer, given only the topic list",
+    "expected_route": "rag_unanswerable",
+    "expected_sources": [],
+    "related_sections": [
+      "storage_sop.md#Temperature-Monitoring"
+    ],
+    "expected_tool": null,
+    "expected_args": null,
+    "must_contain": [
+      "15°C–25°C",
+      "supervising pharmacist"
+    ],
+    "expected_behavior": "Says it cannot see the air conditioning, the thermostat or the current temperature, so it cannot say why the shelf feels warm, and does not guess at a fault. States the rule from Temperature-Monitoring: ambient temperature must stay within 15°C–25°C, and a reading outside that range is reported to the supervising pharmacist the same day with the action taken written beside it.",
+    "label_note": "Asks about the air conditioning. The SOP covers readings outside 15°C–25°C but cannot say why a shelf feels warm. Route: equipment status is not tool data."
+  }
+]

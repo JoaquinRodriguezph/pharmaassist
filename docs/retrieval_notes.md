@@ -28,7 +28,7 @@ Step 4, first look: which embedding model, how to install it, and what the first
 
 **Limits of the choice.** It is an old model (2021) and newer small models may retrieve better, especially on specialist text such as medicine; one third-party page claims a large gap on a domain benchmark, which I have not verified. Other small models (for example the E5 family) use "query:" and "passage:" prefixes, and some others use a query instruction; that is another variable to test later, not part of a first run. The script takes the model name as a parameter (`--model`), so swapping is cheap.
 
-**Fallback.** If PyTorch will not install on Windows with Python 3.12, paste the error and we switch to an embedding model served by Ollama.
+**Fallback.** If PyTorch will not install on Windows with Python 3.12, I switch to an embedding model served by Ollama.
 
 ## Install
 
@@ -74,7 +74,7 @@ Also predicted: no chunk over the 256-token limit at 800/0, the longest (756 cha
 
 ### Token length and truncation
 
-The script counts tokens per chunk with the model's own tokenizer (special tokens included, no truncation), with and without the prefix, and compares the maximum with `model.max_seq_length`. Per the docs, text beyond the limit is truncated: only the first 256 tokens are embedded, so a chunk that is too long would be embedded without its ending and nothing would warn you. The prefix counts toward the limit.
+The script counts tokens per chunk with the model's own tokenizer (special tokens included, no truncation), with and without the prefix, and compares the maximum with `model.max_seq_length`. Per the docs, text beyond the limit is truncated: only the first 256 tokens are embedded, so a chunk that is too long would be embedded without its ending and nothing would warn me. The prefix counts toward the limit.
 
 ### Measured (first run of `py scripts\try_embeddings.py`)
 
