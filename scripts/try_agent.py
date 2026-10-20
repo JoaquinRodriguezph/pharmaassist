@@ -6,6 +6,7 @@
     py scripts/try_agent.py --id Q17 --backend gemini    (uses Gemini requests)
 
 Needs the tracker running, the Chroma store (default chroma_db/noctx), and Ollama or Gemini.
+Ollama's context window comes from OLLAMA_NUM_CTX (default 8192).
 """
 
 import argparse
@@ -41,6 +42,7 @@ def main(argv=None) -> int:
     parser.add_argument("--backend", choices=["ollama", "gemini"], help="overrides LLM_BACKEND")
     parser.add_argument("--db", type=Path, default=REPO_ROOT / "chroma_db" / "noctx")
     parser.add_argument("--max-steps", type=int, default=5)
+    parser.add_argument("--no-prefetch", action="store_true")
     args = parser.parse_args(argv)
 
     expected, setup = None, []
@@ -79,6 +81,8 @@ def main(argv=None) -> int:
         kb_search=lambda query: retrieve(args.db, embedder, query, k=5),
         known_section_ids=kb_section_ids(REPO_ROOT / "docs" / "knowledge_base"),
         max_steps=args.max_steps,
+        prefetch=not args.no_prefetch,
+        context_window=int(os.environ.get("OLLAMA_NUM_CTX", "8192")),
     )
     results = agent.run_conversation(setup + [question])
 
@@ -99,10 +103,11 @@ def main(argv=None) -> int:
     print(f"valid citations: {list(result.valid_citations)}")
     print(f"invalid citations: {[(c.raw, c.reason) for c in result.invalid_citations]}")
     print(f"refusal={result.refusal} medical_refusal={result.medical_refusal} scope_refusal={result.scope_refusal} "
-          f"says_not_covered={result.says_not_covered}")
+          f"medical_mode={result.medical_mode} blocked_by={result.blocked_by}")
     print(f"repair attempted={result.repair_attempted} applied={result.repair_applied}")
-    print(f"tokens prompt={result.prompt_tokens} completion={result.completion_tokens} "
-          f"reasoning={result.reasoning_tokens} latency={(result.latency_seconds or 0):.1f}s model={result.model}")
+    print(f"tokens prompt={result.prompt_tokens} (largest turn {result.max_prompt_tokens}) "
+          f"completion={result.completion_tokens} reasoning={result.reasoning_tokens} "
+          f"latency={(result.latency_seconds or 0):.1f}s model={result.model}")
     return 0
 
 

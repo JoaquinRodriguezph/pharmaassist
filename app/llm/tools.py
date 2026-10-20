@@ -4,7 +4,7 @@ A session holds one conversation with tool declarations. `step()` asks the model
 turn: either text (the final answer) or one or more tool calls. After running the calls,
 `add_tool_results` sends their outputs back, and `step()` is called again. `add_user_message`
 adds a follow-up user message, and `step(allow_tools=False)` asks for text only (used for
-the citation repair turn).
+the citation repair turn). `num_ctx` sets Ollama's context window (Gemini ignores it).
 
 Shapes confirmed by scripts/probe_tool_calling.py (ollama 0.6.3, google-genai 2.31.0):
 - Ollama returns message.tool_calls[i].function.name and .arguments (a dict). A tool result
@@ -90,7 +90,8 @@ def _arguments(raw: Any) -> dict:
 
 class OllamaToolSession(ToolSession):
     def __init__(self, client: OllamaClient, *, system: str | None, question: str, history: list[Message],
-                 tool_specs: list[dict], temperature: float, max_tokens: int | None) -> None:
+                 tool_specs: list[dict], temperature: float, max_tokens: int | None,
+                 num_ctx: int | None = None) -> None:
         self._client = client
         self._messages: list[Any] = [{"role": "system", "content": system}] if system else []
         self._messages += [{"role": m["role"], "content": m["content"]} for m in history]
@@ -99,6 +100,8 @@ class OllamaToolSession(ToolSession):
         self._options: dict[str, float | int] = {"temperature": temperature}
         if max_tokens is not None:
             self._options["num_predict"] = max_tokens
+        if num_ctx is not None:
+            self._options["num_ctx"] = num_ctx
 
     def step(self, allow_tools: bool = True) -> ToolTurn:
         start = time.perf_counter()
@@ -147,8 +150,9 @@ class OllamaToolSession(ToolSession):
 
 class GeminiToolSession(ToolSession):
     def __init__(self, client: GeminiClient, *, system: str | None, question: str, history: list[Message],
-                 tool_specs: list[dict], temperature: float, max_tokens: int | None) -> None:
-        self._client = client
+                 tool_specs: list[dict], temperature: float, max_tokens: int | None,
+                 num_ctx: int | None = None) -> None:
+        self._client = client  # num_ctx is an Ollama setting and is ignored here
         self._contents: list[types.Content] = [
             types.Content(role=_to_gemini_role(m["role"]), parts=[types.Part.from_text(text=m["content"])])
             for m in history
@@ -230,9 +234,10 @@ class GeminiToolSession(ToolSession):
 
 
 def start_tool_session(client, *, system: str | None, question: str, history: list[Message] | None = None,
-                       tool_specs: list[dict], temperature: float = 0.0, max_tokens: int | None = None) -> ToolSession:
+                       tool_specs: list[dict], temperature: float = 0.0, max_tokens: int | None = None,
+                       num_ctx: int | None = None) -> ToolSession:
     kwargs = dict(system=system, question=question, history=list(history or []), tool_specs=tool_specs,
-                  temperature=temperature, max_tokens=max_tokens)
+                  temperature=temperature, max_tokens=max_tokens, num_ctx=num_ctx)
     if isinstance(client, OllamaClient):
         return OllamaToolSession(client, **kwargs)
     if isinstance(client, GeminiClient):

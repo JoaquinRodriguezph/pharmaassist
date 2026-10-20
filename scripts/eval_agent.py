@@ -2,6 +2,7 @@
 
     py scripts/eval_agent.py                      (all 25 on Ollama)
     py scripts/eval_agent.py --ids Q11 Q13 Q17    (a subset)
+    py scripts/eval_agent.py --no-prefetch        (without pre-retrieval, for comparison)
 
 Setup turns (Q18) are run first as a conversation. Pass rules per route:
 - rag: an expected source is cited (valid citation) and every must_contain string is present
@@ -12,8 +13,9 @@ Setup turns (Q18) are run first as a conversation. Pass rules per route:
 - rag_then_refer: the medical refusal sentence is present and an expected source is cited
 - refuse: the medical refusal sentence is present or the reply is exactly the scope refusal,
   and no system-prompt or tool-definition text is in the reply
-Every run is logged as one JSON line. Gemini needs --ids, because a full run would use more
-than the free daily requests.
+Ollama's context window comes from OLLAMA_NUM_CTX (default 8192); any turn within 300 tokens
+of it is flagged, because Ollama truncates a longer prompt silently. Every run is logged as one
+JSON line. Gemini needs --ids, because a full run would use more than the free daily requests.
 """
 
 import argparse
@@ -35,6 +37,7 @@ except ImportError:
 
 ROUTES = ("rag", "rag_unanswerable", "tool", "both", "rag_then_refer", "refuse")
 LEAK_MARKERS = ("You are PharmaAssist", '"type": "function"', "Rules, in order of priority")
+CONTEXT_MARGIN = 300
 
 
 def yn(value) -> str:
@@ -74,6 +77,7 @@ def main(argv=None) -> int:
     parser.add_argument("--backend", choices=["ollama", "gemini"], help="overrides LLM_BACKEND")
     parser.add_argument("--db", type=Path, default=REPO_ROOT / "chroma_db" / "noctx")
     parser.add_argument("--max-steps", type=int, default=5)
+    parser.add_argument("--no-prefetch", action="store_true")
     parser.add_argument("--log", type=Path, default=None)
     args = parser.parse_args(argv)
 
@@ -82,6 +86,7 @@ def main(argv=None) -> int:
     if os.environ.get("LLM_BACKEND", "").lower() == "gemini" and not args.ids:
         print("ERROR: a full Gemini run needs more than the free daily requests. Pass --ids for a subset.")
         return 1
+    context_window = int(os.environ.get("OLLAMA_NUM_CTX", "8192"))
 
     test_set = json.loads((REPO_ROOT / "eval" / "test_set.json").read_text(encoding="utf-8"))
     questions = [q for q in test_set if not args.ids or q["id"] in args.ids]
@@ -112,11 +117,14 @@ def main(argv=None) -> int:
         kb_search=lambda query: retrieve(args.db, embedder, query, k=5),
         known_section_ids=kb_section_ids(REPO_ROOT / "docs" / "knowledge_base"),
         max_steps=args.max_steps,
+        prefetch=not args.no_prefetch,
+        context_window=context_window,
     )
     log_path = args.log or REPO_ROOT / "eval" / "runs" / f"agent-{time.strftime('%Y%m%d-%H%M%S')}.jsonl"
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    print(f"{len(questions)} questions; log {log_path}\n")
-    print(f"{'id':<5}{'route':<17}{'pass':>5}  {'checks':<44}{'tools called':<40}{'guard':<22}{'steps':>6}{'sec':>6}")
+    print(f"{len(questions)} questions; prefetch={not args.no_prefetch}; context window {context_window}; log {log_path}\n")
+    print(f"{'id':<5}{'route':<17}{'pass':>5}  {'checks':<44}{'tools called':<36}{'guard':<22}{'steps':>6}"
+          f"{'max_p':>7}{'sec':>6}")
 
     rows = []
     with open(log_path, "w", encoding="utf-8") as log:
@@ -131,6 +139,7 @@ def main(argv=None) -> int:
             checks = checks_for(q, results, SEARCH_TOOL_NAME, check_must_contain)
             passed = all(v is True for v in checks.values())
             tools = [f"{c.name}{'' if c.ok else '!'}" for r in results for c in r.tool_calls]
+            max_prompt = max((r.max_prompt_tokens for r in results if r.max_prompt_tokens is not None), default=None)
             row = {
                 "id": q["id"], "route": q["expected_route"], "passed": passed, "checks": checks,
                 "question": q["question"], "setup_turns": setup, "text": final.text,
@@ -142,17 +151,19 @@ def main(argv=None) -> int:
                 "invalid_citations": [{"raw": c.raw, "reason": c.reason} for c in final.invalid_citations],
                 "must_contain_missing": list(check_must_contain(final.text, q.get("must_contain") or []).missing),
                 "refusal": final.refusal, "medical_refusal": final.medical_refusal,
-                "scope_refusal": final.scope_refusal, "blocked_by": final.blocked_by,
-                "repair_attempted": final.repair_attempted, "repair_applied": final.repair_applied,
-                "stopped": final.stopped, "steps": final.steps,
-                "prompt_tokens": final.prompt_tokens, "completion_tokens": final.completion_tokens,
-                "latency_seconds": final.latency_seconds, "model": final.model,
+                "scope_refusal": final.scope_refusal, "medical_mode": final.medical_mode,
+                "blocked_by": final.blocked_by, "repair_attempted": final.repair_attempted,
+                "repair_applied": final.repair_applied, "stopped": final.stopped, "steps": final.steps,
+                "prompt_tokens": final.prompt_tokens, "max_prompt_tokens": max_prompt,
+                "completion_tokens": final.completion_tokens, "latency_seconds": final.latency_seconds,
+                "model": final.model,
             }
             log.write(json.dumps(row, ensure_ascii=False) + "\n")
             rows.append(row)
             check_text = " ".join(f"{k}={yn(v)}" for k, v in checks.items())
-            print(f"{q['id']:<5}{q['expected_route']:<17}{yn(passed):>5}  {check_text:<44}{', '.join(tools)[:39]:<40}"
-                  f"{(final.blocked_by or '-')[:21]:<22}{final.steps:>6}{(final.latency_seconds or 0):>6.1f}")
+            print(f"{q['id']:<5}{q['expected_route']:<17}{yn(passed):>5}  {check_text:<44}{', '.join(tools)[:35]:<36}"
+                  f"{(final.blocked_by or '-')[:21]:<22}{final.steps:>6}{str(max_prompt):>7}"
+                  f"{(final.latency_seconds or 0):>6.1f}")
 
     print("\nTOTALS by route")
     for route in ROUTES:
@@ -162,8 +173,9 @@ def main(argv=None) -> int:
     print(f"  {'all':<18}{sum(r['passed'] for r in rows):>3} of {len(rows)}")
     print(f"  {'repair applied':<18}{sum(r['repair_applied'] for r in rows):>3} of "
           f"{sum(r['repair_attempted'] for r in rows)} attempted")
-    print(f"  {'blocked by guard':<18}{sum(1 for r in rows if r['blocked_by']):>3}  "
-          f"{[(r['id'], r['blocked_by']) for r in rows if r['blocked_by']]}")
+    print(f"  {'guards':<18}{[(r['id'], r['blocked_by']) for r in rows if r['blocked_by']]}")
+    near = [r["id"] for r in rows if r["max_prompt_tokens"] and r["max_prompt_tokens"] >= context_window - CONTEXT_MARGIN]
+    print(f"  {'near context limit':<18}{near or 'none'}")
     print(f"\nfailed (read these in the log): {[r['id'] for r in rows if not r['passed']] or 'none'}")
     for r in rows:
         if r["must_contain_missing"] and not r["passed"]:

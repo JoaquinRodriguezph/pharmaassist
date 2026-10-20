@@ -38,11 +38,16 @@ def _object(properties: dict, required: tuple[str, ...] = ()) -> dict:
 _BRANCH_ID = {
     "type": "integer",
     "minimum": 1,
-    "description": "Branch id from get_branches, for example 1 for Manila Main Branch.",
+    "description": "Branch id from the branch list. Omit it when the question is about several or all branches.",
+}
+_REQUIRED_BRANCH_ID = {
+    "type": "integer",
+    "minimum": 1,
+    "description": "Branch id from the branch list.",
 }
 _BRANCH_NAME = {
     "type": "string",
-    "description": 'Exact branch name from get_branches, for example "Manila Main Branch".',
+    "description": "Exact branch name from the branch list. Omit it when the question is about several or all branches.",
 }
 _DAYS = {
     "type": "integer",
@@ -54,23 +59,21 @@ _DAYS = {
 TOOLS: tuple[ToolSpec, ...] = (
     ToolSpec(
         "get_branches",
-        "List every pharmacy branch with its branch_id, name, city and address. "
-        "Use it to find a branch_id or the exact branch name.",
+        "List every pharmacy branch with its branch_id, name, city and address.",
         "/branches",
         _object({}),
     ),
     ToolSpec(
         "get_low_stock",
         "Stock batches that are low compared with their reorder level, with branch, product, supplier, "
-        "batch number, quantity and reorder level. Optional branch_id limits it to one branch; "
-        "omit it to see every branch.",
+        "batch number, quantity and reorder level. Without branch_id it covers every branch.",
         "/reports/low-stock",
         _object({"branch_id": _BRANCH_ID}),
     ),
     ToolSpec(
         "get_monthly_sales",
         "Sales per month: number of sales, total revenue and average sale value. "
-        "Optional branch_name limits it to one branch.",
+        "Without branch_name it covers every branch.",
         "/reports/monthly-sales",
         _object({"branch_name": _BRANCH_NAME}),
     ),
@@ -79,12 +82,12 @@ TOOLS: tuple[ToolSpec, ...] = (
         "Batches at one branch that expire within the given number of days, with product, "
         "batch number, quantity, expiry date and days left.",
         "/reports/expiring",
-        _object({"branch_id": _BRANCH_ID, "days": _DAYS}, required=("branch_id",)),
+        _object({"branch_id": _REQUIRED_BRANCH_ID, "days": _DAYS}, required=("branch_id",)),
     ),
     ToolSpec(
         "get_top_sellers",
         "Top-selling products by units sold, with revenue and rank within the branch. "
-        "Optional branch_name limits it to one branch.",
+        "Without branch_name it covers every branch.",
         "/reports/top-sellers",
         _object({"branch_name": _BRANCH_NAME}),
     ),
@@ -93,7 +96,7 @@ TOOLS: tuple[ToolSpec, ...] = (
         "Restock recommendations for one branch: products below their reorder level, with supplier, "
         "current quantity, reorder level and a suggested order quantity.",
         "/reports/restock",
-        _object({"branch_id": _BRANCH_ID}, required=("branch_id",)),
+        _object({"branch_id": _REQUIRED_BRANCH_ID}, required=("branch_id",)),
     ),
 )
 
