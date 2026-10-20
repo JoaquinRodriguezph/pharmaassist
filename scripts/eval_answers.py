@@ -160,4 +160,13 @@ def main(argv=None) -> int:
 
     to_read = [r["id"] for r in ind if not r["says_not_covered"]]
     to_read += [r["id"] for r in ans if r["route"] == "both" and not r["says_not_covered"] and r["id"] not in to_read]
-    to_read += [r["id"] for r in main_rows if r["uncited_answer"] and r["id"] not in
+    to_read += [r["id"] for r in main_rows if r["uncited_answer"] and r["id"] not in to_read]
+    to_read += [r["id"] for r in main_rows if r["invalid_citations"] and r["id"] not in to_read]
+    to_read += [r["id"] for r in ans if not r["must_contain_pass"] and r["id"] not in to_read]
+    print("\nread by hand (independent or mixed without the sentence, uncited, invalid citations, "
+          f"or missing must_contain): {to_read or 'none'}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
