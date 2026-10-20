@@ -4,3 +4,4 @@ ollama
 pytest
 chromadb
 faiss-cpu
+httpx
