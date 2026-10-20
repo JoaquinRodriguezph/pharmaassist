@@ -140,3 +140,14 @@ What "right" means differs by question, according to the labels already in the e
 | Largest `prompt_tokens` | all 17 | under 1,500 |
 
 **Optional addition, mine and not part of the requested 17:** Q09 and Q10, the two original "not in the documents" questions. They are the clean pure-refusal cases, and on Ollama they cost nothing. **Prediction:** `refusal` True for both. I would report them in a separate row so they do not change the 17-question numbers.
+
+## 6. Added after writing the code (not part of the pre-registration)
+
+Sections 1 to 5 were written before any code and are left as they were. These points came from reviewing the code.
+
+- **New field `uncited_answer`.** True when the reply is not a pure refusal and has no citation of any kind, valid or invalid. Expect small models to produce this: `[Customer-Returns]` (no file name, no `.md`) is not read as a citation at all and is ignored silently, while `[returns_and_expiry_policy.md]` is flagged `malformed`. Without this field, a dropped file name would show up only as a missing citation. A partial answer with the fixed sentence and no citations also counts as uncited, because its facts carry no source. It is not part of the predictions in section 5, so I will report it next to them, not as a test of them.
+- **`near_context_limit` is a heuristic.** If Ollama silently truncates an oversized prompt, `prompt_tokens` counts the truncated prompt, not the one I built, so the flag can read False after truncation. It catches calls that come close to the limit, not every truncation. At the predicted size (under 1,500 prompt tokens against 4,096) it should not matter. A firmer check would be to count the built prompt with Llama's own tokenizer before the call. **Untested.**
+- **The knowledge base is read on every call.** `answer()` calls `kb_section_ids` each time to explain invalid citations, which re-reads and re-parses 4 files. That is cheap now. In Step 7 the service should load it once.
+- **A chunk id without `::n` stops `answer()`.** `group_sources` raises `ValueError` ("chunk id ... does not end in '::<part number>'"). The store always writes the suffix, so this cannot happen today, and the message says what is wrong.
+- **A URL containing brackets would be parsed.** The parser reads only square brackets, so in `[text](url)` the URL part is ignored, unless the URL itself contains `[` or `]`. That is an edge case, and I did not add code for it.
+- **`test_every_real_section_id_has_the_section_id_shape` asserts exactly 13 sections.** It will fail for a non-bug reason when a section is added. I kept it because it also catches a section lost by accident; update the number with the knowledge base.

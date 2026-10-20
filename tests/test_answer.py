@@ -144,6 +144,40 @@ def test_token_counts_latency_and_model_are_copied_from_the_llm_response():
     assert (result.latency_seconds, result.model) == (0.5, "fake-llm")
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        pytest.param("Readings are taken twice daily.", id="no-brackets"),
+        pytest.param("Readings are taken twice daily [Temperature-Monitoring].", id="section-name-without-file"),
+        pytest.param(f"Readings are taken twice daily. {REFUSAL_SENTENCE}", id="partial-answer-without-citations"),
+    ],
+)
+def test_an_answer_with_no_citation_of_any_kind_is_flagged_uncited(text):
+    result, _, _ = run(text)
+
+    assert result.uncited_answer
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        pytest.param(REFUSAL_SENTENCE, id="pure-refusal"),
+        pytest.param(f"Twice daily [{TEMP}].", id="valid-citation"),
+        pytest.param("Twice daily [returns_and_expiry_policy.md].", id="only-an-invalid-citation"),
+    ],
+)
+def test_a_refusal_or_any_citation_is_not_uncited(text):
+    result, _, _ = run(text)
+
+    assert not result.uncited_answer
+
+
+def test_an_empty_store_is_not_an_uncited_answer():
+    result, _, _ = run("never used", store=FakeStore(chunks=[]))
+
+    assert not result.uncited_answer
+
+
 # ---------------------------------------------------------------------------
 # The context-limit flag
 # ---------------------------------------------------------------------------

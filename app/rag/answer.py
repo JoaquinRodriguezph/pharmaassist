@@ -42,6 +42,7 @@ class Answer:
     invalid_citations: tuple[InvalidCitation, ...]
     refusal: bool  # the whole reply is the fixed sentence
     says_not_covered: bool  # the fixed sentence appears anywhere
+    uncited_answer: bool  # not a refusal, and no citation of any kind, valid or invalid
     prompt_tokens: int | None
     completion_tokens: int | None
     reasoning_tokens: int | None
@@ -90,7 +91,7 @@ def answer(
     if not retrieved:
         return Answer(
             question=question, text=REFUSAL_SENTENCE, retrieved=(), sources=(),
-            valid_citations=(), invalid_citations=(), refusal=True, says_not_covered=True,
+            valid_citations=(), invalid_citations=(), refusal=True, says_not_covered=True, uncited_answer=False,
             prompt_tokens=None, completion_tokens=None, reasoning_tokens=None,
             latency_seconds=None, model=None, near_context_limit=None,
             system=SYSTEM_PROMPT, prompt=prompt,
@@ -113,6 +114,7 @@ def answer(
         invalid_citations=citations.invalid,
         refusal=is_refusal(text),
         says_not_covered=says_not_covered(text),
+        uncited_answer=not is_refusal(text) and not citations.valid and not citations.invalid,
         prompt_tokens=response.prompt_tokens,
         completion_tokens=response.completion_tokens,
         reasoning_tokens=response.reasoning_tokens,
