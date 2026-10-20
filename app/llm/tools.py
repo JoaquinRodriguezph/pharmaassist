@@ -12,7 +12,8 @@ Shapes confirmed by scripts/probe_tool_calling.py (ollama 0.6.3, google-genai 2.
 - Gemini returns response.function_calls (FunctionCall with id, name, args) and a model
   Content whose parts carry a thought_signature, so that Content is sent back unchanged.
   Results go back as FunctionResponse parts with the call's id and {"output": <text>}.
-  Sending a result back to Gemini has not been run live yet.
+  The full round trip (call, result sent back, final answer) was confirmed live on
+  gemini-3.6-flash in eval/runs/agent-gemini.jsonl.
 """
 
 from __future__ import annotations
