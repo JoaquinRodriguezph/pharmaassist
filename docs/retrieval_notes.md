@@ -1,6 +1,6 @@
 # Retrieval notes
 
-Step 4, first look: which embedding model, how to install it, and what the first embeddings show. Labels: **Card** = stated on the model's Hugging Face card; items marked **pending** have not yet been read from the card in the local snapshot (the copy of the card in the Hugging Face cache on this machine). **Docs** = stated in the sentence-transformers documentation. **Measured** = printed by `scripts/try_embeddings.py`. **Derived** = calculated from other numbers. **Prediction** = written before running anything.
+Step 4, first look: which embedding model, how to install it, and what the first embeddings show. Labels: **Card** = stated on the model's Hugging Face card. Rows marked **(snapshot)** were read from the copy of the card in the Hugging Face cache on this machine; the other card facts come from reproductions of the card text. **Docs** = stated in the sentence-transformers documentation. **Measured** = printed by `scripts/try_embeddings.py`. **Derived** = calculated from other numbers. **Prediction** = written before running anything.
 
 ## Embedding model
 
@@ -11,10 +11,11 @@ Step 4, first look: which embedding model, how to install it, and what the first
 | Name | `sentence-transformers/all-MiniLM-L6-v2` | |
 | Embedding dimension | 384 | Card ("384 dimensional dense vector space"); **Measured**: the script printed 384. |
 | Maximum sequence length | 256 word pieces; longer input is truncated | Card ("By default, input text longer than 256 word pieces is truncated"); Docs (longer texts are truncated to the first `max_seq_length` tokens) |
-| License | Apache-2.0, **pending**: not yet read from the card in the local snapshot | Hugging Face metadata of models derived from it |
+| License | Apache-2.0 | **Card (snapshot):** the card's header says `license: apache-2.0` |
+| Language | English | **Card (snapshot):** the header says `language: en` |
 | Size | 22.7 million parameters, stored as 32-bit floats; `model.safetensors` is 90.9 MB | Parameters from the Hugging Face metadata of derived models. **Measured**: the download log showed `model.safetensors` at 90.9 MB, which matches the Derived figure (22.7 million x 4 bytes = 90.8 MB). |
-| Prefixes ("query:" / "passage:") | No mention of prefixes in the card; the card's own example encodes plain sentences. **Pending**: a search of the local snapshot for `prefix`, `query:` and `passage:` has not yet been recorded. | Card |
-| Training | Fine-tuned from `nreimers/MiniLM-L6-H384-uncased` on over 1 billion sentence pairs; intended as a sentence and short-paragraph encoder | Card |
+| Prefixes ("query:" / "passage:") | No mention of prefixes in the card. A search of the card in the local snapshot for `prefix`, `query:` and `passage:` (PowerShell `Select-String`, which ignores case) found no match. | **Card (snapshot)** |
+| Training | Fine-tuned from `nreimers/MiniLM-L6-H384-uncased` (the header's `base_model` confirms the name) on over 1 billion sentence pairs; intended as a sentence and short-paragraph encoder | Card |
 
 **A gotcha with the length limit, and a correction.** A discussion thread on the model's page reported that its tokenizer configuration had been changed to 512, while the 256 limit lives in `sentence_bert_config.json`, so plain `transformers` would truncate at 512 and give different embeddings. In the run below the tokenizer reported 256 as well (**Measured**: `tokenizer.model_max_length: 256`), so that configuration seems to have been reverted, and my earlier note that it said 512 is out of date. The advice stands: load the model through `sentence-transformers`, and read `max_seq_length` from the model rather than assuming.
 
@@ -47,7 +48,7 @@ torch
 
 This is a large dependency (the same guide shows the CPU `torch` download at about 143 MiB), so the requirements files will be split at Docker time.
 
-**Versions: pending.** Not yet recorded; `py -m pip show sentence-transformers torch chromadb` gives them.
+**Versions (Measured, `py -m pip show`):** Python 3.12.10, sentence-transformers 6.1.0, torch 2.14.1+cpu (the CPU build), chromadb 1.5.9. The license shown by `pip show` belongs to the library, not to the model; the model's license is the one from its card, in the table above.
 
 **Result (Measured):** the packages installed and the script ran on Python 3.12.10 on Windows, so the Ollama fallback is not needed. The versions of `sentence-transformers` and `torch`, and which `torch` build was installed, were not recorded; `py -m pip show sentence-transformers torch` would fix that. The run printed three warnings, none an error: unauthenticated requests to the Hugging Face Hub (a `HF_TOKEN` is optional and gives higher rate limits; keep it out of the repository), a symlinks warning for the Hugging Face cache on Windows (harmless; `HF_HUB_DISABLE_SYMLINKS_WARNING=1` silences it), and a deprecation notice for `get_sentence_embedding_dimension`, which the script no longer calls.
 

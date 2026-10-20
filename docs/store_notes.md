@@ -33,14 +33,34 @@ The Chroma store in `app/rag/store.py`: what the Chroma documentation says, the 
 
 **Nothing is embedded twice.** Unchanged chunks are not sent to the embedder, so a second run with nothing changed does no embedding.
 
+**What counts as "no collection".** Only a name that `list_collections()` does not list. The first version treated any error from `get_collection` as "not found", which would have read a corrupt database as an empty one and started a new store on top of it. Now any other error propagates. `list_collections()` returns `Collection` objects in Chroma 1.x and names in 0.6.x (Chroma's migration guide), so the code reads each entry's name with `getattr` and works with both. Tests cover a missing name, both return types, and errors while listing and while fetching a listed collection; the last test also checks that ingest and retrieve stop and create nothing.
+
+**[Measured, chromadb 1.5.9]** `get_collection('nope')` raises `chromadb.errors.NotFoundError: Collection [nope] does not exist`, so that is the exception a missing collection gives; the store does not rely on it. `list_collections()` on an empty store returns a plain `list`. A non-empty store gives `[Collection(name=abc)]`: Collection objects, as the 1.x documentation says (the first command I gave you failed because it used a collection name that is too short; Chroma requires 3 to 512 characters).
+
 **Smaller choices.** Stored ids are read page by page, because I did not want to rely on `get` returning everything by default. `k` larger than the collection returns everything. A missing store is reported and not created, because `PersistentClient` would otherwise create an empty one. The collection name is `pharmaassist_kb`. `retrieve` opens the store on every call, which is simple, and the timing in `try_retrieval.py` includes it.
+
+## Known limits
+
+- **Switching the prefix setting is not atomic.** `ingest_kb` updates the collection's recorded `with_context` (`collection.modify`) before it writes the new vectors. If a run is interrupted in between, the collection can say `with_context=True` while some stored vectors were made without the prefix (or the other way round). The next ingest repairs this, because the fingerprint of every affected chunk includes the prefix setting and so differs from the stored one, and those chunks are embedded again. Until then, retrieval from such a store mixes two kinds of vectors.
+- **Interrupted runs leave stale chunks, never missing ones.** New and changed chunks are written first and stale ids are deleted last. Until the next run finishes the job, old chunks can still be retrieved.
+- **The fingerprint cannot see changed model weights** under the same name, or a library change that alters the vectors. Use `rebuild=True`.
+- **No protection against two ingests running at the same time.** Both would read the same stored state and could write conflicting results. Run one at a time.
+- **Paging in `get` past one page** (500 chunks) has not been exercised; the store has 14 chunks.
 
 ## Checked and not checked
 
-- **Stand-in only:** all 26 tests in `tests/test_store.py` and `tests/test_embedding.py` pass against my stand-in for Chroma. They cover the counts, edits, deletions, the prefix change, the stale-part deletion, the guard and the trap test. I also removed the cosine configuration from a copy of `store.py` and confirmed that the trap test fails, so the test does catch a collection left on the default distance. That was against the stand-in's idea of the default.
-- **Not checked against real Chroma:** that `embedding_function=None` is accepted; that your Chroma version takes `configuration=`; the `limit` and `offset` arguments of `get`; the type of returned embeddings (numpy arrays in some versions); booleans in collection metadata; and that a missing collection raises something `store.py` treats as "not found". These need your `py -m pytest` output.
-- **Pending:** the cross-check against the Step 4a table (see below).
+Real run on this machine: Python 3.12.10, chromadb 1.5.9, sentence-transformers 6.1.0.
+
+- **[Measured] The tests pass against real Chroma.** `py -m pytest -v` gave 231 passed in 19.47 s, including all 26 store and embedding tests; after the not-found fix and the Step 4c code it gave 296 passed in 19.68 s, including the six new lookup tests, and 297 passed in 19.20 s once the independent-questions test was added. Of the assumptions listed before the run: `embedding_function=None` was accepted; `configuration={"hnsw": {"space": "cosine"}}` was accepted; `get` with `limit` and `offset` worked; returned embeddings could be compared with our own cosine function; a boolean in the collection metadata came back as a boolean (`with_context is False`); and on a fresh folder a missing collection was treated as "not found" and created. The trap test passing on real Chroma shows the collection really uses cosine space: the stored scores matched our own cosine to within 0.00001.
+- **Not exercised:** paging in `get` beyond one page (the store has 14 chunks and the page size is 500), and a store with an existing folder but no collection.
+- **Stand-in:** earlier, the same tests passed against my stand-in for Chroma, and the trap test failed on a copy without the cosine configuration. That showed the test could catch the mistake; the real library has now passed it.
 
 ## Cross-check with the real model
 
-**Pending.** Run `scripts/ingest_kb.py`, then `scripts/try_retrieval.py`. The second compares the top-3 for Q01, Q06 and Q08 with the Step 4a table (same chunk, score within 0.001) and prints the retrieval time. To be filled in from the output.
+`py scripts\ingest_kb.py`, then `py scripts\try_retrieval.py`, with the prefix on (the default).
+
+- **[Measured]** The first ingest added 14 chunks and took 0.80 s; the second run reported `unchanged=14` and took 0.16 s, because nothing was embedded again.
+- **[Measured]** The top 3 for Q01, Q06 and Q08 match the Step 4a "with prefix" table in every position: 9 of 9, the same chunk and the same score to three decimals (for example Q08: 0.762, 0.693, 0.671, with Contraindications third). So the whole path agrees: chunking, the prefix setting, Chroma's cosine distance and `score = 1 - distance`.
+- **[Measured]** `retrieve()` took 52, 36 and 37 ms on the first pass and 35, 34 and 33 ms on the second. That includes embedding the query and opening the store, on 14 chunks on this CPU.
+- **Not yet done:** the same cross-check with `--no-context` against the "without prefix" table.
+- **[Observed]** The first `py scripts\try_retrieval.py` in the pasted session printed nothing and the second worked. I do not know why; if it happens again, send me the output.
